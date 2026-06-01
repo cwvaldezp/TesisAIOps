@@ -1,0 +1,27 @@
+%% Diagrama: Secuencia de una consulta (pipeline online)
+%% Proposito: mostrar la interaccion temporal entre componentes al responder.
+%% Referenciado por: docs/03_flujos.md (seccion 3)
+sequenceDiagram
+    actor U as Usuario
+    participant I as Interfaz (CLI)
+    participant R as Retriever
+    participant E as Embedder
+    participant V as Vector Store
+    participant O as Orquestador RAG
+    participant L as Capa LLM
+
+    U->>I: Pregunta en lenguaje natural
+    I->>R: Enviar consulta
+    R->>E: Embeber la pregunta
+    E-->>R: Vector de consulta
+    R->>V: Buscar top-k chunks similares
+    V-->>R: Chunks relevantes + metadatos (archivo, linea, ts)
+    R->>O: Pregunta + chunks recuperados
+    O->>O: Ensamblar contexto y construir prompt
+    O->>L: Prompt (instrucciones + contexto + pregunta)
+    L-->>O: Respuesta con citas
+    O-->>I: Respuesta formateada
+    I-->>U: Respuesta + citas a lineas de log
+
+    Note over L: temperatura baja -> respuesta fiel a la evidencia
+    Note over V: si el indice esta vacio -> "sin datos indexados"

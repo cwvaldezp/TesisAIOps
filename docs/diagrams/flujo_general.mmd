@@ -1,0 +1,32 @@
+%% Diagrama: Flujo general end-to-end de TesisAIOps
+%% Propósito: mostrar desde los logs crudos hasta la respuesta con citas.
+%% Referenciado por: docs/03_flujos.md (seccion 1)
+flowchart TD
+    subgraph PREP["0 - Preparacion (manual)"]
+        A[Logs de ejemplo HAProxy/IIS]
+    end
+
+    subgraph IDX["Pipeline de Indexacion (offline)"]
+        B[Ingesta: leer archivos]
+        C[Parser: HAProxy / IIS]
+        D[Normalizador: esquema comun]
+        E[Chunker: trocear eventos]
+        F[Embedder: generar vectores]
+        G[(Vector Store)]
+        B --> C --> D --> E --> F --> G
+    end
+
+    subgraph QRY["Pipeline de Consulta (online)"]
+        H[Usuario: pregunta en lenguaje natural]
+        I[Retriever: buscar chunks relevantes]
+        J[Orquestador RAG: ensamblar contexto]
+        K[Capa LLM: generar respuesta]
+        L[Respuesta con citas a logs]
+        H --> I --> J --> K --> L
+    end
+
+    A --> B
+    G -.consulta por similitud.-> I
+
+    classDef store fill:#e8f0fe,stroke:#3367d6,stroke-width:1px;
+    class G store;

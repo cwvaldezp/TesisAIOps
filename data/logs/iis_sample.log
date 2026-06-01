@@ -1,0 +1,13 @@
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-02-10 14:00:00
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) sc-status sc-substatus sc-win32-status time-taken
+2026-02-10 14:00:01 198.51.100.5 GET /home - 443 - 203.0.113.10 Mozilla/5.0+(Windows+NT+10.0) 200 0 0 35
+2026-02-10 14:00:02 198.51.100.5 GET /assets/app.js - 443 - 203.0.113.11 Mozilla/5.0+(Windows+NT+10.0) 200 0 0 12
+2026-02-10 14:00:04 198.51.100.6 POST /api/login - 443 - 203.0.113.12 Mozilla/5.0+(X11;+Linux+x86_64) 200 0 0 210
+2026-02-10 14:00:09 198.51.100.6 GET /api/products id=42 443 - 203.0.113.13 Mozilla/5.0+(iPhone) 404 0 2 18
+2026-02-10 14:03:11 198.51.100.7 GET /api/orders - 443 - 203.0.113.15 Mozilla/5.0+(Windows+NT+10.0) 500 0 0 1985
+2026-02-10 14:03:12 198.51.100.7 GET /api/orders - 443 - 203.0.113.16 Mozilla/5.0+(Windows+NT+10.0) 500 0 0 2010
+2026-02-10 14:03:14 198.51.100.7 POST /api/checkout - 443 - 203.0.113.17 Mozilla/5.0+(Macintosh) 503 0 0 50
+2026-02-10 14:05:45 198.51.100.5 GET /home - 443 - 203.0.113.19 Mozilla/5.0+(Windows+NT+10.0) 200 0 0 29
+2026-02-10 14:05:47 198.51.100.6 GET /api/users - 443 - 203.0.113.20 Mozilla/5.0+(X11;+Linux+x86_64) 200 0 0 41

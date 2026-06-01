@@ -1,0 +1,3 @@
+# Carpeta de salida del parser (data/processed).
+# Los archivos generados aquí son datos DERIVADOS y regenerables, por lo que
+# se ignoran en git (ver .gitignore). Este .gitkeep solo preserva la carpeta.

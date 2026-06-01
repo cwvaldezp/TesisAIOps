@@ -1,0 +1,169 @@
+"""
+config.py — Carga de la configuración del proyecto (ADR-008).
+
+QUÉ HACE
+    Lee `config/config.yaml` (parámetros no sensibles, versionables) y lo expone
+    como un diccionario validado, con valores por defecto seguros. Los secretos
+    NO se cargan aquí (irían en config/.env en fases futuras).
+
+CUÁNDO SE INVOCA
+    Al inicio del orquestador del parser (src/parse_logs.py) y en las pruebas.
+
+ENTRADAS
+    Ruta al archivo YAML (por defecto: config/config.yaml).
+
+SALIDAS
+    Un objeto `Config` con acceso por secciones (ingesta, parsing, etc.).
+
+QUÉ PUEDE FALLAR
+    - Archivo inexistente -> FileNotFoundError con mensaje claro.
+    - YAML mal formado     -> yaml.YAMLError.
+    - Valor de enum inválido (p. ej. on_parse_error) -> ValueError.
+
+EFECTO DE PARÁMETROS
+    Cada parámetro está documentado en docs/04_parametros_configuracion.md.
+    Cambiarlos altera qué se lee, cómo se parsea y dónde se escribe la salida.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+# Ruta por defecto del archivo de configuración (relativa a la raíz del repo).
+DEFAULT_CONFIG_PATH = Path("config/config.yaml")
+
+# Valores permitidos para parámetros de tipo enumerado (se validan al cargar).
+VALID_SOURCE_TYPE = {"auto", "haproxy", "iis"}
+VALID_ON_PARSE_ERROR = {"skip", "keep", "fail"}
+VALID_OUTPUT_FORMAT = {"json", "jsonl"}
+# Estrategias de chunking soportadas (ADR-011). 'by_time' está previsto pero
+# aún NO implementado en la Fase 2B.
+VALID_CHUNK_STRATEGY = {"by_events"}
+
+
+@dataclass
+class Config:
+    """Configuración tipada del parser (subconjunto necesario para la Fase 1)."""
+
+    # --- Ingesta ---
+    logs_path: str = "./data/logs"
+    file_pattern: str = "*.log"
+    encoding: str = "utf-8"
+    source_type: str = "auto"
+
+    # --- Parsing ---
+    haproxy_log_format: str = "http"
+    iis_fields_from_header: bool = True
+    iis_fields: list[str] = field(default_factory=list)
+    on_parse_error: str = "skip"
+
+    # --- Normalización ---
+    timezone: str = "UTC"
+
+    # --- Salida ---
+    processed_path: str = "./data/processed"
+    parser_output_format: str = "jsonl"
+
+    # --- Chunking (ADR-011, Fase 2B) ---
+    chunk_strategy: str = "by_events"
+    chunk_size: int = 20
+    chunk_overlap: int = 4
+
+    # --- Seguridad ---
+    read_only: bool = True
+
+    def validate(self) -> None:
+        """Valida los enums; lanza ValueError con un mensaje accionable."""
+        if self.source_type not in VALID_SOURCE_TYPE:
+            raise ValueError(
+                f"source_type inválido: {self.source_type!r}. "
+                f"Use uno de {sorted(VALID_SOURCE_TYPE)}."
+            )
+        if self.on_parse_error not in VALID_ON_PARSE_ERROR:
+            raise ValueError(
+                f"on_parse_error inválido: {self.on_parse_error!r}. "
+                f"Use uno de {sorted(VALID_ON_PARSE_ERROR)}."
+            )
+        if self.parser_output_format not in VALID_OUTPUT_FORMAT:
+            raise ValueError(
+                f"parser_output_format inválido: {self.parser_output_format!r}. "
+                f"Use uno de {sorted(VALID_OUTPUT_FORMAT)}."
+            )
+        # --- Chunking (ADR-011) ---
+        if self.chunk_strategy not in VALID_CHUNK_STRATEGY:
+            raise ValueError(
+                f"chunk_strategy inválido: {self.chunk_strategy!r}. "
+                f"Soportado(s): {sorted(VALID_CHUNK_STRATEGY)} (by_time aún no implementado)."
+            )
+        if self.chunk_size <= 0:
+            raise ValueError(f"chunk_size debe ser > 0 (es {self.chunk_size}).")
+        if not (0 <= self.chunk_overlap < self.chunk_size):
+            raise ValueError(
+                f"chunk_overlap debe cumplir 0 <= overlap < chunk_size "
+                f"(overlap={self.chunk_overlap}, chunk_size={self.chunk_size})."
+            )
+        # Invariante de seguridad del MVP (ADR-005): el parser es solo lectura.
+        if self.read_only is not True:
+            raise ValueError(
+                "read_only debe ser true: el MVP nunca actúa sobre infraestructura "
+                "(invariante ADR-005)."
+            )
+
+
+def _section(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """Devuelve una sección del YAML como dict (vacío si falta)."""
+    value = data.get(name) or {}
+    if not isinstance(value, dict):
+        raise ValueError(f"La sección '{name}' del config debe ser un mapeo.")
+    return value
+
+
+def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
+    """Carga y valida la configuración desde un archivo YAML.
+
+    Si una clave falta en el YAML, se usa el valor por defecto del dataclass.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No se encontró el archivo de configuración: {path}. "
+            "Cópielo/ajústelo a partir de config/config.yaml."
+        )
+
+    with path.open("r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+
+    ingesta = _section(data, "ingesta")
+    parsing = _section(data, "parsing")
+    normalizacion = _section(data, "normalizacion")
+    salida = _section(data, "salida")
+    chunking = _section(data, "chunking")
+    seguridad = _section(data, "seguridad")
+
+    cfg = Config(
+        logs_path=ingesta.get("logs_path", Config.logs_path),
+        file_pattern=ingesta.get("file_pattern", Config.file_pattern),
+        encoding=ingesta.get("encoding", Config.encoding),
+        source_type=ingesta.get("source_type", Config.source_type),
+        haproxy_log_format=parsing.get("haproxy_log_format", Config.haproxy_log_format),
+        iis_fields_from_header=parsing.get(
+            "iis_fields_from_header", Config.iis_fields_from_header
+        ),
+        iis_fields=parsing.get("iis_fields", []),
+        on_parse_error=parsing.get("on_parse_error", Config.on_parse_error),
+        timezone=normalizacion.get("timezone", Config.timezone),
+        processed_path=salida.get("processed_path", Config.processed_path),
+        parser_output_format=salida.get(
+            "parser_output_format", Config.parser_output_format
+        ),
+        chunk_strategy=chunking.get("chunk_strategy", Config.chunk_strategy),
+        chunk_size=chunking.get("chunk_size", Config.chunk_size),
+        chunk_overlap=chunking.get("chunk_overlap", Config.chunk_overlap),
+        read_only=seguridad.get("read_only", Config.read_only),
+    )
+    cfg.validate()
+    return cfg

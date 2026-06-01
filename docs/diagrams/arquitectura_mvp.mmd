@@ -1,0 +1,43 @@
+%% Diagrama: Arquitectura de componentes del MVP TesisAIOps
+%% Proposito: mostrar componentes, responsabilidades y relaciones entre pipelines.
+%% Referenciado por: docs/02_arquitectura.md (seccion 1)
+flowchart LR
+    subgraph SRC["Fuentes de datos (solo lectura)"]
+        L1[Logs HAProxy]
+        L2[Logs IIS - W3C]
+    end
+
+    subgraph INDEX["Pipeline Indexacion (offline / batch)"]
+        ING[Ingesta]
+        PAR[Parser HAProxy / IIS]
+        NOR[Normalizador]
+        CHK[Chunker]
+        EMB[Embedder]
+        ING --> PAR --> NOR --> CHK --> EMB
+    end
+
+    VS[(Vector Store - embeddings + metadatos)]
+
+    subgraph QUERY["Pipeline Consulta (online / interactivo)"]
+        UI[Interfaz CLI]
+        RET[Retriever]
+        ORQ[Orquestador RAG]
+        LLM[Capa LLM]
+        UI --> RET --> ORQ --> LLM --> UI
+    end
+
+    subgraph CONF["Configuracion"]
+        CFG[Parametros + .env]
+    end
+
+    L1 --> ING
+    L2 --> ING
+    EMB --> VS
+    VS --> RET
+    CFG -.parametriza.-> INDEX
+    CFG -.parametriza.-> QUERY
+
+    classDef store fill:#e8f0fe,stroke:#3367d6,stroke-width:1px;
+    classDef conf fill:#fef7e0,stroke:#f9ab00,stroke-width:1px;
+    class VS store;
+    class CFG conf;

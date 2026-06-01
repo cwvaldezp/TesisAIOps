@@ -1,0 +1,32 @@
+# --- TesisAIOps .gitignore ---
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Secretos y configuración local (ADR-008: nunca versionar .env)
+.env
+config/.env
+
+# Salida del parser (datos derivados, regenerables)
+data/processed/*
+!data/processed/.gitkeep
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+
+# Sistema operativo
+Thumbs.db
+.DS_Store

@@ -1,0 +1,59 @@
+# =============================================================================
+# TesisAIOps - Configuración del proyecto (ADR-008: YAML + .env)
+# -----------------------------------------------------------------------------
+# Este archivo contiene los parámetros NO sensibles y versionables.
+# Los secretos (API keys de fases futuras) van en config/.env (no versionado).
+#
+# Catálogo completo y explicación de cada parámetro:
+#   docs/04_parametros_configuracion.md
+#
+# Regla del proyecto: ningún valor mágico en el código; todo vive aquí.
+# =============================================================================
+
+# --- Ingesta: qué archivos se leen y cómo ------------------------------------
+ingesta:
+  logs_path: "./data/logs"     # Carpeta con los logs de ejemplo
+  file_pattern: "*.log"        # Patrón glob de archivos a ingerir
+  encoding: "utf-8"            # Codificación de lectura
+  source_type: "auto"         # auto | haproxy | iis (auto = detectar por archivo)
+
+# --- Parsing: cómo se interpreta cada línea ----------------------------------
+parsing:
+  haproxy_log_format: "http"   # Variante de log HAProxy (MVP: solo 'http')
+  iis_fields_from_header: true # Tomar columnas de la directiva '#Fields:' del archivo
+  # Fallback de columnas W3C si el archivo IIS no trae cabecera '#Fields:':
+  iis_fields:
+    - "date"
+    - "time"
+    - "s-ip"
+    - "cs-method"
+    - "cs-uri-stem"
+    - "cs-uri-query"
+    - "s-port"
+    - "cs-username"
+    - "c-ip"
+    - "cs(User-Agent)"
+    - "sc-status"
+    - "sc-substatus"
+    - "sc-win32-status"
+    - "time-taken"
+  on_parse_error: "skip"       # skip | keep | fail
+
+# --- Normalización: esquema común --------------------------------------------
+normalizacion:
+  timezone: "UTC"             # Zona horaria de referencia para los timestamps
+
+# --- Salida del parser -------------------------------------------------------
+salida:
+  processed_path: "./data/processed"  # Carpeta de salida de eventos normalizados
+  parser_output_format: "jsonl"       # json | jsonl
+
+# --- Chunking (ADR-011, Fase 2B) ---------------------------------------------
+chunking:
+  chunk_strategy: "by_events"  # by_events (by_time previsto, aún no implementado)
+  chunk_size: 20               # nº de eventos por chunk
+  chunk_overlap: 4             # solape en eventos (0 <= overlap < chunk_size)
+
+# --- Seguridad ---------------------------------------------------------------
+seguridad:
+  read_only: true             # Invariante del MVP (ADR-005): solo lectura
