@@ -1,0 +1,43 @@
+# =============================================================================
+# TesisAIOps - Normalización de fin de línea
+# -----------------------------------------------------------------------------
+# Objetivo: almacenar SIEMPRE los archivos de texto con LF en el repositorio,
+# independientemente del sistema operativo (evita el ruido "LF will be replaced
+# by CRLF" en Windows y diffs espurios entre Windows/Linux).
+#
+# `text=auto`  -> Git detecta automáticamente qué archivos son texto.
+# `eol=lf`     -> en el árbol de trabajo y en el repo se usa LF.
+# Los binarios se marcan explícitamente para que NUNCA se normalicen.
+# =============================================================================
+
+# Por defecto: detectar texto y normalizar a LF.
+* text=auto eol=lf
+
+# --- Código y configuración (texto, LF) --------------------------------------
+*.py     text eol=lf
+*.pyi    text eol=lf
+*.md     text eol=lf
+*.txt    text eol=lf
+*.yaml   text eol=lf
+*.yml    text eol=lf
+*.json   text eol=lf
+*.toml   text eol=lf
+*.cfg    text eol=lf
+*.ini    text eol=lf
+*.mmd    text eol=lf
+*.log    text eol=lf
+*.env    text eol=lf
+.gitignore     text eol=lf
+.gitattributes text eol=lf
+
+# --- Binarios (nunca normalizar) ---------------------------------------------
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.pdf    binary
+*.zip    binary
+*.gz     binary
+*.whl    binary
+*.pyc    binary
