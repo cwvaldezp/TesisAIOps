@@ -51,6 +51,7 @@ TesisAIOps/
     ├── 05_bitacora_decisiones.md     # Registro de decisiones técnicas (ADR)
     ├── 06_manual_tecnico.md          # Guía de instalación y operación
     ├── 07_reglas_desarrollo.md       # (alias → 99) redirección, no editar aquí
+    ├── 90_ESTADO_PROYECTO.md         # Fotografía del estado (fases, ADRs, métricas)
     ├── 98_PREGUNTAS_DEFENSA.md       # Banco de preguntas para la defensa (tipo tribunal)
     ├── 99_REGLAS_DESARROLLO.md       # CANÓNICO: reglas R1–R18 + roles de revisión
     └── diagrams/
