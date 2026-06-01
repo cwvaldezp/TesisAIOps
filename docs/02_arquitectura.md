@@ -153,13 +153,22 @@ ADR futuro (no se crea aún — YAGNI). Ver ADR-010.
   Embeddings **locales** por privacidad (los logs no salen del equipo). **Aún NO
   indexa en Chroma** (Fase 2D).
 
-### 3.6 Vector store
-- **Qué hace:** almacena embeddings + metadatos y permite búsqueda por similitud.
-- **Cuándo se invoca:** escritura en indexación; lectura en consulta.
-- **Entradas:** (escritura) vectores+metadatos; (lectura) vector de consulta + k.
-- **Salidas:** (lectura) top-k chunks más similares con su score.
-- **Puede fallar si:** índice corrupto/ausente; dimensión incompatible.
-- **Efecto de parámetros:** métrica de similitud y `k` afectan qué se recupera.
+### 3.6 Vector store (implementado en Fase 2D — ADR-013: Chroma)
+- **Qué hace:** almacena embeddings + metadatos en una colección **Chroma** local
+  y persistente, y permitirá búsqueda por similitud (la lectura llega en Fase 3).
+- **Cuándo se invoca:** **escritura** en indexación (Fase 2D, implementado);
+  lectura en consulta (Fase 3, aún no).
+- **Quién lo invoca:** el orquestador `src/index_embeddings.py`
+  (`python -m src.index_embeddings`).
+- **Entradas:** registros de `data/processed/*.embeddings.jsonl`.
+- **Salidas:** colección Chroma persistida en `data/index/` (ids=`chunk_id`,
+  vector, metadatos aplanados de citabilidad/filtrado). Detalle en `03_flujos.md` §2.4.
+- **Puede fallar si:** `chromadb` no instalado; sin `*.embeddings.jsonl`;
+  dimensión incompatible con la colección.
+- **Efecto de parámetros:** `similarity_metric` define la métrica de la colección;
+  `index_path`/`collection_name` dónde y en qué colección se persiste; cambiar el
+  modelo de embeddings (dimensión) **obliga a reconstruir**. **Aún NO se consulta**
+  (sin NL, sin RAG, sin LLM).
 
 ### 3.7 Retriever
 - **Qué hace:** dada una pregunta, la embebe y consulta el vector store.

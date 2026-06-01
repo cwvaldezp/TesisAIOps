@@ -11,12 +11,12 @@
 | Campo | Valor |
 |---|---|
 | **Fecha de la foto** | 2026-06-01 |
-| **Versión (paquete)** | `0.1.0` (`src/__init__.py`) · **hito: Fase 2C cerrada** |
+| **Versión (paquete)** | `0.1.0` (`src/__init__.py`) · **hito: Fase 2D cerrada** |
 | **Rama** | `main` (sincronizada con `origin/main`) |
 | **Remoto** | https://github.com/cwvaldezp/TesisAIOps.git |
-| **Estado global** | 🟢 Pipeline **ingesta → parseo → normalización → chunking → embeddings** funcional (embeddings locales). Sin vector store ni RAG todavía. |
-| **Próximo objetivo** | **Fase 2D — Vector store: Chroma (ADR-013)** |
-| **Hito siguiente previsto** | **Fase 2D — Vector store** (requiere aprobar `chromadb`) |
+| **Estado global** | 🟢 **Pipeline de indexación COMPLETO**: parseo → normalización → chunking → embeddings → índice **Chroma** local. Sin consulta NL, sin RAG, sin LLM. |
+| **Próximo objetivo** | **Fase 3 — Retriever (recuperación top-k, ADR-014)** |
+| **Hito siguiente previsto** | **Fase 3 — Retriever** (recuperación por similitud + filtros; **sin LLM**) |
 
 > **Versión:** se mantiene **`__version__ = "0.1.0"`** de forma deliberada (no se
 > sube a 0.2.0 en este hito). El avance de fase se rastrea por esta fotografía y
@@ -36,18 +36,19 @@
 | 2A | Diseño IA (chunking/embeddings/vector store/recuperación) | ADR-011, 012, 013, 014 | ✅ (diseño) |
 | 2B | Chunker (stdlib, sin IA) | `src/chunker.py`, `src/chunk_logs.py` | ✅ |
 | 2C | Embedder (sentence-transformers local, 384-d) | `src/embedder.py`, `src/embed_chunks.py` | ✅ |
+| 2D | Vector store Chroma (local persistente, upsert) | `src/vector_store.py`, `src/index_embeddings.py` | ✅ |
 
 **Flujos demostrables hoy:**
 - `log (HAProxy/IIS) → parse_line() → evento normalizado (13 campos) → JSON`
 - `*.events.jsonl → Chunker → *.chunks.jsonl`
 - `*.chunks.jsonl → Embedder → *.embeddings.jsonl` (embeddings + metadata)
+- `*.embeddings.jsonl → Chroma (data/index/)` (índice citable y filtrable)
 
 ## Fases pendientes
 
 | Fase | Descripción | Requisito(s) | ADR | Prerrequisito |
 |------|-------------|--------------|-----|---------------|
-| **2D** | **Vector store** (indexar embeddings) | RF-06 | ADR-013 | **Instalar `chromadb`** (requiere aprobación) |
-| 3 | Retriever (recuperación) | RF-08, RF-07 | ADR-014 | — |
+| **3** | **Retriever** (recuperación top-k + filtros, **sin LLM**) | RF-08 | ADR-014 | — (usa embedder + Chroma ya instalados) |
 | 4 | Capa LLM (respuesta con citas) | RF-09, RF-10, RF-11 | _(pendiente ADR)_ | Decidir modelo LLM |
 | 5 | Interfaz de consulta + demo | RF-12, RF-07 | ADR-006 | — |
 
@@ -67,14 +68,14 @@
 | 010 | Esquema de evento (13 campos) | Aceptada · **implementado** |
 | 011 | Chunking por ventana de eventos | Aceptada · **implementado (2B)** |
 | 012 | Embeddings locales (MiniLM) | Aceptada · **implementado (2C)** |
-| 013 | Vector store Chroma | Aceptada (diseño) |
+| 013 | Vector store Chroma | Aceptada · **implementado (2D)** |
 | 014 | Recuperación top-k + filtros | Aceptada (diseño) |
 
 > Pendiente de decisión (sin ADR aún): **modelo LLM** (Fase 4).
 
-## Preguntas de defensa (25)
+## Preguntas de defensa (26)
 
-`P-01 … P-25` en [`98_PREGUNTAS_DEFENSA.md`](98_PREGUNTAS_DEFENSA.md), en formato
+`P-01 … P-26` en [`98_PREGUNTAS_DEFENSA.md`](98_PREGUNTAS_DEFENSA.md), en formato
 tribunal (7 facetas a partir de R16). Cobertura por tema:
 
 | Rango | Tema |
@@ -88,21 +89,22 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 | P-19..P-23 | Decisiones de Fase 2A (chunking, embeddings, Chroma vs FAISS, recuperación) |
 | P-24 | Diseño del chunker (agrupación por archivo + metadatos) |
 | P-25 | Cómo se prueba el Embedder sin el modelo real (inyección de `encode_fn`) |
+| P-26 | Metadatos en Chroma (aplanado) y upsert idempotente |
 
 ## Métricas actuales
 
 | Métrica | Valor |
 |---|---|
-| Pruebas (pytest) | **48 / 48 en verde** |
-| Archivos de prueba | 9 (`tests/test_*.py`) |
-| Módulos Python (`src/`) | 12 |
+| Pruebas (pytest) | **57 / 57 en verde** |
+| Archivos de prueba | 11 (`tests/test_*.py`) |
+| Módulos Python (`src/`) | 14 |
 | Scripts de ejemplo | 1 (`examples/demo_haproxy_parser.py`) |
 | Documentos (`docs/`) | 13 `.md` + 3 diagramas `.mmd` |
 | ADRs | 14 |
-| Preguntas de defensa | 25 |
-| Requisitos funcionales cumplidos | RF-01…RF-05 (5 / 12) |
-| Commits | 3 |
-| Dependencias externas | PyYAML, pytest, **sentence-transformers** (Fase 2C) |
+| Preguntas de defensa | 26 |
+| Requisitos funcionales cumplidos | RF-01…RF-06 (6 / 12) |
+| Commits | 4 |
+| Dependencias externas | PyYAML, pytest, sentence-transformers, **chromadb** (Fase 2D) |
 
 **Cobertura de requisitos funcionales:**
 
@@ -113,7 +115,7 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 | RF-03 | Normalizar a esquema común | ✅ |
 | RF-04 | Chunking | ✅ |
 | RF-05 | Embeddings | ✅ |
-| RF-06 | Indexar (vector store) | 📋 (diseño ✅) |
+| RF-06 | Indexar (vector store) | ✅ |
 | RF-07 | Consulta en lenguaje natural | 📋 |
 | RF-08 | Recuperar chunks | 📋 (diseño ✅) |
 | RF-09 | Ensamblar contexto/prompt | 📋 |
@@ -123,26 +125,25 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 
 ---
 
-## Próximo objetivo: Fase 2D — Vector store (Chroma)
+## Próximo objetivo: Fase 3 — Retriever (recuperación)
 
-**Qué:** implementar la indexación de los `*.embeddings.jsonl` en **Chroma**
-(ADR-013), local y persistente, guardando junto a cada vector sus metadatos de
-citabilidad (`source_file`, `line_start/end`, `ts_*`, `severities`).
+**Qué:** implementar el **Retriever** (ADR-014): dada una consulta, embeber el
+texto, buscar **top-k** por similitud en la colección Chroma y devolver los chunks
+con sus metadatos de cita, con **filtros opcionales por metadatos** (tiempo,
+severidad, fuente). **Sin LLM**: es solo recuperación de evidencia.
 
-**Por qué ahora:** es el paso natural tras los embeddings — ya tenemos vectores +
-metadatos; falta un índice que permita buscar por similitud (base de la
-recuperación, Fase 3).
+**Por qué ahora:** el índice ya existe; el retriever lo explota y es la primera
+mitad del pipeline de consulta (la segunda, generación con LLM, es Fase 4).
 
-**Prerrequisito (bloqueante):** instalar `chromadb`. Por las reglas del proyecto,
-**requiere aprobación explícita** antes de añadir la dependencia; se hará en su
-propio paso verificable, manteniendo `*.embeddings.jsonl` como entrada estable.
+**Prerrequisito:** ninguno nuevo — reutiliza el embedder (ADR-012) y Chroma
+(ADR-013) ya instalados.
 
 **Riesgos / notas:**
-- Cambiar el modelo de embeddings (dimensión) obliga a **reconstruir** el índice.
-- Sigue **sin RAG ni LLM**: 2D solo indexa; la consulta es Fase 3+.
+- `top_k` y los filtros afectan precisión/recall (ADR-014); se afinan con datos.
+- Sigue **sin RAG ni LLM**: la Fase 3 recupera, no genera respuestas.
 
-**Estado de Fase 2C (cerrada):** Embedder local funcional, 384-d, salida
-`*.embeddings.jsonl` con metadatos; lógica probada sin cargar el modelo (P-25).
+**Estado de Fase 2D (cerrada):** índice Chroma local persistente funcional;
+`upsert` idempotente; metadatos aplanados citables/filtrables (P-26).
 
 ---
 

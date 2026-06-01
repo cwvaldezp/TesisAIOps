@@ -22,6 +22,9 @@ config/.env
 data/processed/*
 !data/processed/.gitkeep
 
+# Índice vectorial de Chroma (datos derivados, regenerables) - Fase 2D
+data/index/
+
 # IDE / editor
 .vscode/
 .idea/

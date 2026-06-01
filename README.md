@@ -72,11 +72,12 @@ TesisAIOps/
 
 ## 5. Estado actual
 
-🟢 **Fase 2C — Embedder implementado (ADR-012).**
-Tras parseo (Fase 1) y chunking (Fase 2B), el **Embedder** vectoriza el texto de
-cada chunk con un modelo **local** `all-MiniLM-L6-v2` (384-d) y arrastra los
-metadatos de citabilidad (RF-05). **Aún NO hay Chroma ni RAG** (fases
-posteriores). **48 pruebas en verde** (la lógica se prueba sin cargar el modelo).
+🟢 **Fase 2D — Vector store Chroma implementado (ADR-013).**
+El pipeline de **indexación** está completo: parseo → chunking → embeddings →
+**indexación en Chroma** local y persistente (RF-06), con metadatos de
+citabilidad y `upsert` idempotente. **Aún NO hay consulta en lenguaje natural,
+RAG ni LLM** (fases posteriores). **57 pruebas en verde** (la lógica se prueba sin
+cargar el modelo ni Chroma).
 
 Ejecutar:
 
@@ -85,14 +86,15 @@ pip install -r requirements.txt
 python -m src.parse_logs                  # logs -> eventos: ./data/processed/*.events.jsonl
 python -m src.chunk_logs                  # eventos -> chunks: ./data/processed/*.chunks.jsonl
 python -m src.embed_chunks                # chunks -> embeddings: ./data/processed/*.embeddings.jsonl
-python -m examples.demo_haproxy_parser    # demo parser: log -> parse_line() -> evento -> JSON
-python -m pytest -q                       # ejecuta las 48 pruebas
+python -m src.index_embeddings            # embeddings -> Chroma: ./data/index/
+python -m pytest -q                       # ejecuta las 57 pruebas
 ```
 
 Flujos demostrables:
 - `log (HAProxy/IIS) → parse_line() → evento normalizado → JSON` (Fase 1)
 - `*.events.jsonl → Chunker → *.chunks.jsonl` (Fase 2B)
 - `*.chunks.jsonl → Embedder → *.embeddings.jsonl` (embeddings + metadata) (Fase 2C)
+- `*.embeddings.jsonl → Chroma (data/index/)` (índice citable y filtrable) (Fase 2D)
 
 ## 6. Reglas de trabajo del proyecto
 

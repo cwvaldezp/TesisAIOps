@@ -297,6 +297,70 @@ flowchart LR
 
 ---
 
+## 2.4 Subflujo de Indexación en Chroma (Fase 2D — implementado)
+
+> Detalle del paso 6 del pipeline de indexación (Vector store). Carga los
+> `*.embeddings.jsonl` en una colección **Chroma** local y persistente (ADR-013),
+> guardando vector + metadatos de citabilidad/filtrado. **NO** hace consultas en
+> lenguaje natural, ni RAG, ni LLM (fases posteriores).
+
+**Cuándo se ejecuta:** tras el embedder, sobre los `*.embeddings.jsonl`.
+
+**Quién lo invoca:** el orquestador `python -m src.index_embeddings`.
+
+**Entrada → Salida:** `data/processed/*.embeddings.jsonl` → colección Chroma
+persistida en `data/index/` (no es un archivo de texto: es el store de Chroma).
+
+### Pasos detallados
+
+| Paso | Acción | Entrada | Salida |
+|------|--------|---------|--------|
+| 1 | Listar `*.embeddings.jsonl` | `processed_path` | Lista de archivos |
+| 2 | Cargar registros de embedding | JSONL | Lista de registros |
+| 3 | Construir payload Chroma (ids, embeddings, metadatos, documentos) | registros | payload |
+| 4 | Abrir colección Chroma persistente (métrica = `similarity_metric`) | `index_path`, `collection_name` | colección |
+| 5 | **Upsert** (insertar/actualizar por `chunk_id`) | payload | colección poblada |
+| 6 | Reportar conteo total | colección | resumen |
+
+### Qué se guarda en Chroma (por registro)
+
+| Elemento Chroma | Origen | Nota |
+|-----------------|--------|------|
+| `id` | `chunk_id` | Clave única; **upsert** evita duplicados al reindexar |
+| `embedding` | `embedding` (384-d) | Vector del chunk |
+| `document` | `"<source_file>:<line_start>-<line_end>"` | Referencia de cita legible |
+| `metadata` | aplanado (ver abajo) | Solo escalares (str/int/float/bool) |
+
+**Metadatos (aplanados, porque Chroma no admite listas/dicts):**
+`source_file`, `line_start`, `line_end`, `ts_start`, `ts_end`, `embedding_model`,
+`embedding_dim`, y el conteo de severidades como `sev_info`, `sev_warning`,
+`sev_error` (enteros). Estos campos habilitan el **filtrado por metadatos** de la
+recuperación futura (ADR-014) y mantienen la **citabilidad** (RNF-05).
+
+### Qué puede fallar
+
+- `processed_path` sin `*.embeddings.jsonl` → error claro y aborta.
+- `chromadb` no instalado → error claro (no toca infraestructura).
+- Dimensión de un vector distinta a la de la colección → Chroma rechaza el add.
+
+### Efecto de cambiar parámetros
+
+- `index_path` → ubicación del store persistente; cambiarlo crea/usa otro índice.
+- `similarity_metric` → métrica de la colección (`cosine` por defecto); cambiarla
+  exige **recrear** la colección.
+- `collection_name` → separa conjuntos de datos en el mismo `index_path`.
+- Cambiar el **modelo de embeddings** (dimensión) **obliga a reconstruir** el índice.
+
+```mermaid
+flowchart LR
+    EMB[(*.embeddings.jsonl)] --> LD[Cargar registros]
+    LD --> PAY[Payload: ids+vectores+metadatos]
+    PAY --> COL[Coleccion Chroma persistente]
+    COL --> IDX[(data/index/ - store Chroma)]
+```
+
+---
+
 ## 3. Flujo de Consulta (online)
 
 **Cuándo se ejecuta:** cada vez que el usuario formula una pregunta.

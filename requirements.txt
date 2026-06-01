@@ -7,9 +7,10 @@
 # el framework de pruebas.
 #
 # El Chunker (Fase 2B, ADR-011) NO añade dependencias: usa solo la stdlib.
-# El vector store (Chroma, Fase 2D) y el LLM (Fase 4) se añadirán en su fase.
+# El LLM (Fase 4) se añadirá en su fase.
 # =============================================================================
 
 PyYAML>=6.0                     # Carga de config/config.yaml (ADR-008)
 pytest>=7.4                     # Pruebas unitarias (tests/)
 sentence-transformers>=2.2      # Embeddings locales (ADR-012, Fase 2C) — modelo all-MiniLM-L6-v2
+chromadb>=0.4                   # Vector store local persistente (ADR-013, Fase 2D)

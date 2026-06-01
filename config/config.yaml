@@ -59,6 +59,13 @@ embeddings:
   embedding_model: "all-MiniLM-L6-v2"  # modelo LOCAL (sentence-transformers), 384-d
   embedding_batch_size: 32             # nº de textos por lote al codificar
 
+# --- Vector store (ADR-013, Fase 2D) -----------------------------------------
+vector_store:
+  vector_backend: "chroma"     # chroma (local, persistente) — único soportado en el MVP
+  index_path: "./data/index"   # carpeta donde Chroma persiste el índice
+  similarity_metric: "cosine"  # cosine | l2 | ip (espacio HNSW de la colección)
+  collection_name: "tesisaiops"  # nombre de la colección Chroma
+
 # --- Seguridad ---------------------------------------------------------------
 seguridad:
   read_only: true             # Invariante del MVP (ADR-005): solo lectura

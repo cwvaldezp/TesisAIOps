@@ -97,17 +97,23 @@ Configurado en `config.yaml` sección `embeddings` (cargado por `src/config.py`)
 > modelo (no se configura). Cambiar `embedding_model` cambia la dimensión y
 > **siempre** obliga a reindexar. Override por CLI: `--model`.
 
-## 7. Vector store — decidido en **ADR-013** (Fase 2A, diseño)
+## 7. Vector store — **ADR-013** (decidido Fase 2A · **implementado Fase 2D**)
+
+Configurado en `config.yaml` sección `vector_store` (cargado por `src/config.py`).
 
 | Parámetro | Qué controla | Default (ADR-013) | Opciones/Rango | Reindexa | Sensibilidad |
 |---|---|---|---|---|---|
-| `vector_backend` | Motor de la base vectorial | `chroma` (local, persistente) | chroma/(faiss futuro) | Sí | Alta |
+| `vector_backend` | Motor de la base vectorial | `chroma` (local, persistente) | chroma | Sí | Alta |
 | `index_path` | Dónde se persiste el índice | `./data/index` | ruta | Sí | Media |
-| `similarity_metric` | Métrica de similitud | `cosine` | cosine/dot/l2 | Sí | Media |
+| `similarity_metric` | Métrica/espacio HNSW de la colección | `cosine` | cosine/l2/ip | Sí | Media |
+| `collection_name` | Nombre de la colección Chroma | `tesisaiops` | texto | Sí | Media |
 
-> **Decidido (ADR-013):** **Chroma** local/persistente, que almacena
-> vectores + metadatos de citabilidad juntos. FAISS se reconsiderará si crece el
-> volumen. (No instalado todavía: decisión de diseño.)
+> **Implementado (Fase 2D):** **Chroma** local/persistente. Guarda vector +
+> metadatos **aplanados** de citabilidad (`source_file`, `line_start/end`,
+> `ts_*`, `sev_info/warning/error`, `embedding_dim`) — Chroma solo admite
+> escalares. Indexa por **upsert** (idempotente: reindexar no duplica). El
+> directorio `data/index/` está git-ignored. Cambiar la métrica o la dimensión
+> del modelo obliga a **reconstruir** la colección.
 
 ## 8. Recuperación (Retriever) — decidido en **ADR-014** (Fase 2A, diseño)
 

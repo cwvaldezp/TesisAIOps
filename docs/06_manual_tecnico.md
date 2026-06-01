@@ -24,11 +24,13 @@ TesisAIOps/
 ├── config/                     # config.yaml + .env.example (ADR-008)
 ├── data/
 │   ├── logs/                   # ENTRADA: logs de ejemplo (HAProxy, IIS)
-│   └── processed/              # SALIDA: eventos normalizados (regenerable)
+│   ├── processed/              # SALIDA: events/chunks/embeddings (regenerable)
+│   └── index/                  # Índice Chroma persistente (git-ignored, Fase 2D)
 ├── src/
 │   ├── config.py · schema.py · parse_logs.py
 │   ├── chunker.py · chunk_logs.py     # Fase 2B (ADR-011), stdlib pura
 │   ├── embedder.py · embed_chunks.py  # Fase 2C (ADR-012), sentence-transformers local
+│   ├── vector_store.py · index_embeddings.py  # Fase 2D (ADR-013), Chroma local
 │   └── parsers/                # haproxy.py · iis.py · timeutils.py
 ├── examples/
 │   └── demo_haproxy_parser.py  # demo log -> parse_line() -> evento -> JSON
@@ -138,20 +140,29 @@ chunk). Usa un modelo **local** (`sentence-transformers`); la **primera vez
 descarga** el modelo (~80 MB) desde HuggingFace. **No indexa en Chroma ni hace
 RAG** (fases posteriores). Parámetros en `config.yaml` (sección `embeddings`).
 
-### 6.1 Indexar logs (Fase 2, comando provisional)
+### 6.0quater Indexar en Chroma (Fase 2D — implementado, ADR-013)
 
 ```bash
-# python -m src.index   # construye el índice vectorial a partir de los logs
+# Indexa los embeddings en Chroma local persistente: *.embeddings.jsonl -> data/index/
+python -m src.index_embeddings
 ```
 
-### 6.2 Consultar (Fase 5, comando provisional)
+Salida: una colección **Chroma** persistida en `data/index/` (sqlite + datos),
+con un punto por chunk: vector + metadatos **aplanados** de citabilidad
+(`source_file`, `line_start/end`, `ts_*`, `sev_info/warning/error`,
+`embedding_dim`) y un `document` de referencia `archivo:linea_ini-linea_fin`.
+Indexa por **upsert** (reindexar **no duplica**). `data/index/` está git-ignored.
+**Solo indexa: sin consultas en lenguaje natural, sin RAG, sin LLM.** Parámetros
+en `config.yaml` (sección `vector_store`).
+
+### 6.1 Recuperar / Consultar (Fase 3+, comando provisional)
 
 ```bash
 # python -m src.ask "¿Por qué hubo errores 503 entre las 14:00 y 14:10?"
 ```
 
-> Estos comandos son **placeholders**; sus nombres definitivos se fijarán al
-> implementar las fases correspondientes y se documentarán aquí.
+> Placeholder: la recuperación (Fase 3), el RAG y el LLM (Fase 4) aún no están
+> implementados; sus comandos definitivos se documentarán aquí al construirlos.
 
 ## 7. Verificación por fase
 

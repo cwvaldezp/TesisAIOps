@@ -55,6 +55,7 @@ objetivo, requisito y componente para trazabilidad de punta a punta.
 | P-23 | ¿Por qué Chroma y no FAISS? (comparativa) | ADR-013 | Decidido (diseño) |
 | P-24 | ¿Por qué el chunker agrupa por archivo y conserva metadatos de rango? | ADR-011 / Fase 2B | Decidido |
 | P-25 | ¿Cómo se prueba el Embedder sin depender del modelo real? | ADR-012 / Fase 2C | Decidido |
+| P-26 | ¿Cómo se guardan los metadatos en Chroma y por qué upsert? | ADR-013 / Fase 2D | Decidido |
 
 ---
 
@@ -1036,6 +1037,59 @@ relevancia. La calidad se medirá al evaluar la recuperación (Fase 3).
 ### Relación con la tesis
 Demuestra ingeniería de calidad sobre un componente de IA: el sistema es
 **testeable y reproducible** sin coste de cómputo, atributo defendible (RNF-08).
+
+---
+
+## P-26
+
+### Pregunta
+¿Cómo se guardan los metadatos en Chroma (que solo admite escalares) y por qué se
+indexa con **upsert** en lugar de `add`?
+
+### Respuesta corta
+Los metadatos se **aplanan** a escalares (los conteos de severidad pasan a
+`sev_info`/`sev_warning`/`sev_error`); y se usa **upsert** para que **reindexar
+sea idempotente** (no duplica puntos, los actualiza por `chunk_id`).
+
+### Respuesta técnica
+Chroma solo acepta metadatos escalares (str/int/float/bool), no listas ni dicts.
+El registro de embedding trae `severities` como dict, así que `to_chroma_metadata`
+lo aplana a tres contadores enteros y sustituye `None` por `""`/`-1`. Esto, además
+de cumplir la restricción, deja los campos **listos para filtrar** en la
+recuperación (ADR-014): por `source_file`, rango de líneas, `ts_*` o severidad.
+El `id` de cada punto es el `chunk_id`; `collection.upsert(...)` inserta o
+**reemplaza** por id, de modo que volver a indexar el mismo corpus no crea
+duplicados (verificado: 2 puntos tras dos ejecuciones). Como `document` se guarda
+una referencia de cita legible `"archivo:linea_ini-linea_fin"`.
+
+### Alternativas consideradas
+- Guardar `severities` como cadena JSON en un solo campo.
+- Usar `add` en vez de `upsert`.
+- No guardar metadatos (solo vectores).
+
+### Por qué no se eligieron
+- *JSON en un campo:* no permitiría filtrar por severidad en Chroma.
+- *`add`:* fallaría o duplicaría al reindexar; `upsert` es idempotente.
+- *Sin metadatos:* rompería la citabilidad (RNF-05) y el filtrado futuro.
+
+### Qué pasa si se cambia un parámetro
+Cambiar `similarity_metric` o la **dimensión** del modelo de embeddings obliga a
+**recrear** la colección; `collection_name`/`index_path` permiten separar o ubicar
+distintos índices.
+
+### Cómo se valida
+`tests/test_vector_store.py` comprueba que los metadatos son escalares y que las
+severidades se aplanan; `tests/test_index_embeddings.py` valida el flujo con un
+**store falso** (sin chromadb) e incluye un test de **idempotencia** del upsert.
+Demostración real: `python -m src.index_embeddings` (cuenta estable al repetir).
+
+### Limitaciones
+El aplanado fija las severidades a tres claves conocidas; una severidad nueva
+requeriría añadir su columna. Chroma local no apunta a escala masiva (ver P-21/P-23).
+
+### Relación con la tesis
+Hace que el índice sea **citable y filtrable** (base de la recuperación con
+evidencia, RNF-05) y **reproducible** (reindexar es seguro), sin infraestructura.
 
 ---
 

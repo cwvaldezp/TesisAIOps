@@ -43,6 +43,10 @@ VALID_OUTPUT_FORMAT = {"json", "jsonl"}
 # Estrategias de chunking soportadas (ADR-011). 'by_time' está previsto pero
 # aún NO implementado en la Fase 2B.
 VALID_CHUNK_STRATEGY = {"by_events"}
+# Backends de vector store soportados (ADR-013). Solo Chroma en el MVP.
+VALID_VECTOR_BACKEND = {"chroma"}
+# Métricas de similitud soportadas por Chroma.
+VALID_SIMILARITY_METRIC = {"cosine", "l2", "ip"}
 
 
 @dataclass
@@ -76,6 +80,12 @@ class Config:
     # --- Embeddings (ADR-012, Fase 2C) ---
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_batch_size: int = 32
+
+    # --- Vector store (ADR-013, Fase 2D) ---
+    vector_backend: str = "chroma"
+    index_path: str = "./data/index"
+    similarity_metric: str = "cosine"
+    collection_name: str = "tesisaiops"
 
     # --- Seguridad ---
     read_only: bool = True
@@ -115,6 +125,17 @@ class Config:
             raise ValueError(
                 f"embedding_batch_size debe ser > 0 (es {self.embedding_batch_size})."
             )
+        # --- Vector store (ADR-013) ---
+        if self.vector_backend not in VALID_VECTOR_BACKEND:
+            raise ValueError(
+                f"vector_backend inválido: {self.vector_backend!r}. "
+                f"Soportado(s): {sorted(VALID_VECTOR_BACKEND)}."
+            )
+        if self.similarity_metric not in VALID_SIMILARITY_METRIC:
+            raise ValueError(
+                f"similarity_metric inválido: {self.similarity_metric!r}. "
+                f"Use uno de {sorted(VALID_SIMILARITY_METRIC)}."
+            )
         # Invariante de seguridad del MVP (ADR-005): el parser es solo lectura.
         if self.read_only is not True:
             raise ValueError(
@@ -152,6 +173,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
     salida = _section(data, "salida")
     chunking = _section(data, "chunking")
     embeddings = _section(data, "embeddings")
+    vector_store = _section(data, "vector_store")
     seguridad = _section(data, "seguridad")
 
     cfg = Config(
@@ -177,6 +199,10 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
         embedding_batch_size=embeddings.get(
             "embedding_batch_size", Config.embedding_batch_size
         ),
+        vector_backend=vector_store.get("vector_backend", Config.vector_backend),
+        index_path=vector_store.get("index_path", Config.index_path),
+        similarity_metric=vector_store.get("similarity_metric", Config.similarity_metric),
+        collection_name=vector_store.get("collection_name", Config.collection_name),
         read_only=seguridad.get("read_only", Config.read_only),
     )
     cfg.validate()
