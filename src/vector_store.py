@@ -137,3 +137,26 @@ class ChromaVectorStore:
         """Nº de puntos en la colección."""
         self.open()
         return int(self._collection.count())
+
+    def query(
+        self, embedding: list[float], top_k: int, where: dict | None = None
+    ) -> dict[str, list]:
+        """Busca los `top_k` puntos más similares a `embedding` (Fase 3, ADR-014).
+
+        Devuelve listas planas (para una sola consulta): ids, distances,
+        metadatas, documents. `where` es un filtro de metadatos de Chroma (opcional).
+        """
+        self.open()
+        res = self._collection.query(
+            query_embeddings=[embedding],
+            n_results=top_k,
+            where=where or None,
+            include=["metadatas", "documents", "distances"],
+        )
+        # Chroma anida por consulta ([[...]]); aplanamos a la primera (única).
+        return {
+            "ids": res["ids"][0],
+            "distances": res["distances"][0],
+            "metadatas": res["metadatas"][0],
+            "documents": res["documents"][0],
+        }

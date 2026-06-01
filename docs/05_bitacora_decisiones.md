@@ -44,7 +44,7 @@ Estados: `Propuesta` → `Aceptada`/`Rechazada`. Una decisión puede ser
 | ADR-011 | Estrategia de chunking (ventana de eventos con solape) | Aceptada (diseño) | 2026-06-01 |
 | ADR-012 | Embeddings locales (sentence-transformers MiniLM) | Aceptada (diseño) | 2026-06-01 |
 | ADR-013 | Vector store local: Chroma (persistente) | Aceptada (diseño) | 2026-06-01 |
-| ADR-014 | Estrategia de recuperación (top-k denso + filtros de metadatos) | Aceptada (diseño) | 2026-06-01 |
+| ADR-014 | Estrategia de recuperación (top-k denso + filtros de metadatos) | Aceptada · **implementado (Fase 3)** | 2026-06-01 |
 
 ---
 
@@ -409,7 +409,7 @@ Estados: `Propuesta` → `Aceptada`/`Rechazada`. Una decisión puede ser
   P-21 (y cierra P-11).
 
 ### ADR-014 · Estrategia de recuperación (top-k denso + filtros de metadatos)
-- **Fecha:** 2026-06-01 · **Estado:** Aceptada (diseño)
+- **Fecha:** 2026-06-01 · **Estado:** Aceptada · **implementado (Fase 3, 2026-06-01)**
 - **Contexto:** Dada una pregunta, hay que recuperar los chunks relevantes que se
   pasarán al LLM. Las consultas de operación suelen estar **acotadas** ("503
   entre las 14:00 y 14:10", "errores del backend be_api").
@@ -438,8 +438,17 @@ Estados: `Propuesta` → `Aceptada`/`Rechazada`. Una decisión puede ser
 - **Limitaciones:** la recuperación puramente densa puede fallar con términos
   exactos raros (IDs, códigos) donde lo léxico ayudaría; de ahí que el híbrido
   quede señalado como mejora futura.
-- **Afecta a:** RF-08; parámetros `top_k`, `score_threshold`, `similarity_metric`.
-  **Vínculo R17:** OE3 · RF-08 · Retriever · ADR-014 · P-22.
+- **Afecta a:** RF-07, RF-08; parámetros `top_k`, `score_threshold`, `similarity_metric`.
+  **Vínculo R17:** OE3 · RF-07/RF-08 · Retriever · ADR-014 · P-22, P-27.
+- **Implementación (Fase 3, 2026-06-01):** lógica pura y testeable en
+  `src/retriever.py` (`distance_to_score`, `build_where`, `build_results`,
+  `retrieve`) + CLI `src/retrieve.py` (`python -m src.retrieve "<consulta>"`,
+  flags `--top-k/--source/--severity/--json`). `embed_fn` (Embedder, ADR-012) y
+  `store` (Chroma, ADR-013) se **inyectan**, de modo que las pruebas
+  (`tests/test_retriever.py`) corren **sin modelo ni chromadb**. Parámetros
+  `top_k`/`score_threshold` externalizados (sección `retrieval` de `config.yaml`).
+  **Solo recuperación de evidencia: sin prompt, sin LLM** (eso es Fase 4).
+  **66 pruebas en verde.**
 
 ---
 

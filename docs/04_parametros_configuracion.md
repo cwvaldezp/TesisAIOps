@@ -115,7 +115,7 @@ Configurado en `config.yaml` sección `vector_store` (cargado por `src/config.py
 > directorio `data/index/` está git-ignored. Cambiar la métrica o la dimensión
 > del modelo obliga a **reconstruir** la colección.
 
-## 8. Recuperación (Retriever) — decidido en **ADR-014** (Fase 2A, diseño)
+## 8. Recuperación (Retriever) — **ADR-014** (decidido Fase 2A · **implementado Fase 3**)
 
 | Parámetro | Qué controla | Default (ADR-014) | Opciones/Rango | Reindexa | Sensibilidad |
 |---|---|---|---|---|---|

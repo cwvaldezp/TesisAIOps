@@ -87,6 +87,10 @@ class Config:
     similarity_metric: str = "cosine"
     collection_name: str = "tesisaiops"
 
+    # --- Recuperación / Retriever (ADR-014, Fase 3) ---
+    top_k: int = 5
+    score_threshold: float = 0.0
+
     # --- Seguridad ---
     read_only: bool = True
 
@@ -136,6 +140,13 @@ class Config:
                 f"similarity_metric inválido: {self.similarity_metric!r}. "
                 f"Use uno de {sorted(VALID_SIMILARITY_METRIC)}."
             )
+        # --- Recuperación (ADR-014) ---
+        if self.top_k <= 0:
+            raise ValueError(f"top_k debe ser > 0 (es {self.top_k}).")
+        if not (0.0 <= self.score_threshold <= 1.0):
+            raise ValueError(
+                f"score_threshold debe estar en [0.0, 1.0] (es {self.score_threshold})."
+            )
         # Invariante de seguridad del MVP (ADR-005): el parser es solo lectura.
         if self.read_only is not True:
             raise ValueError(
@@ -174,6 +185,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
     chunking = _section(data, "chunking")
     embeddings = _section(data, "embeddings")
     vector_store = _section(data, "vector_store")
+    retrieval = _section(data, "retrieval")
     seguridad = _section(data, "seguridad")
 
     cfg = Config(
@@ -203,6 +215,8 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
         index_path=vector_store.get("index_path", Config.index_path),
         similarity_metric=vector_store.get("similarity_metric", Config.similarity_metric),
         collection_name=vector_store.get("collection_name", Config.collection_name),
+        top_k=retrieval.get("top_k", Config.top_k),
+        score_threshold=retrieval.get("score_threshold", Config.score_threshold),
         read_only=seguridad.get("read_only", Config.read_only),
     )
     cfg.validate()

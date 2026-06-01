@@ -51,11 +51,12 @@ objetivo, requisito y componente para trazabilidad de punta a punta.
 | P-19 | ¿Por qué esta estrategia de chunking (ventana de eventos)? | ADR-011 | Decidido (diseño) |
 | P-20 | ¿Por qué embeddings locales y este modelo (MiniLM)? | ADR-012 | Decidido (diseño) |
 | P-21 | ¿Por qué Chroma como vector store y no FAISS? | ADR-013 | Decidido (diseño) |
-| P-22 | ¿Por qué esta estrategia de recuperación (top-k + filtros)? | ADR-014 | Decidido (diseño) |
+| P-22 | ¿Por qué esta estrategia de recuperación (top-k + filtros)? | ADR-014 | Decidido |
 | P-23 | ¿Por qué Chroma y no FAISS? (comparativa) | ADR-013 | Decidido (diseño) |
 | P-24 | ¿Por qué el chunker agrupa por archivo y conserva metadatos de rango? | ADR-011 / Fase 2B | Decidido |
 | P-25 | ¿Cómo se prueba el Embedder sin depender del modelo real? | ADR-012 / Fase 2C | Decidido |
 | P-26 | ¿Cómo se guardan los metadatos en Chroma y por qué upsert? | ADR-013 / Fase 2D | Decidido |
+| P-27 | ¿Cómo se convierte una consulta textual en evidencia recuperada sin usar todavía un LLM? | ADR-014 / Fase 3 | Decidido |
 
 ---
 
@@ -1090,6 +1091,70 @@ requeriría añadir su columna. Chroma local no apunta a escala masiva (ver P-21
 ### Relación con la tesis
 Hace que el índice sea **citable y filtrable** (base de la recuperación con
 evidencia, RNF-05) y **reproducible** (reindexar es seguro), sin infraestructura.
+
+---
+
+## P-27
+
+### Pregunta
+¿Cómo se convierte una **consulta textual** en **evidencia recuperada** sin usar
+todavía un LLM?
+
+### Respuesta corta
+La consulta se **embebe** con el mismo modelo local que los chunks (ADR-012) y su
+vector se compara por **similitud coseno** contra el índice Chroma (ADR-013),
+devolviendo los **top-k** chunks más cercanos con su cita. Es **matemática de
+vectores**, no generación: el LLM (Fase 4) aún no interviene.
+
+### Respuesta técnica
+El retriever (ADR-014, `src/retriever.py`) ejecuta una tubería de pasos puros y
+auditables: (1) valida la consulta; (2) la **embebe** con `all-MiniLM-L6-v2`
+(384-d) — el **mismo** modelo usado al indexar, condición para que las distancias
+sean comparables; (3) opcionalmente construye un filtro `where` de metadatos
+(`build_where`: por `source_file` y/o presencia de severidad); (4) pide a Chroma
+los **top-k** vecinos (`store.query`); (5) convierte cada **distancia → score**
+(`distance_to_score`: coseno → `1 - distance`), ordena por score descendente,
+aplica `score_threshold` y asigna `rank`; (6) reconstruye las severidades desde
+los campos planos `sev_*` y arma el resultado **citable** (`document`
+= `archivo:linea_ini-fin`, `source_file`, `line_start/end`, `ts_*`). La salida es
+una **lista de chunks con score y cita**, no una respuesta en prosa. La frontera
+con el LLM es deliberada: aquí termina la **recuperación de evidencia**; el
+ensamblado de prompt y la generación con citas son la Fase 4.
+
+### Alternativas consideradas
+- Búsqueda **léxica** (coincidencia de palabras / BM25) sobre el texto del log.
+- Mandar la consulta y los logs **directamente a un LLM** sin recuperación previa.
+
+### Por qué no se eligieron
+- *Léxica pura:* no captura sinónimos ni paráfrasis ("caída del backend" vs
+  "503 be_api down"); la búsqueda **densa** sí, por eso es el núcleo del RAG
+  (lo léxico se reserva como mejora híbrida futura, ver P-22).
+- *Todo al LLM:* es justo lo que el proyecto evita (ADR-001/P-01): sin recuperar
+  primero, el modelo alucina y no puede citar evidencia real.
+
+### Qué pasa si se cambia un parámetro
+↑`top_k` → más evidencia recuperada (más recall, más ruido); ↑`score_threshold`
+→ se descartan chunks poco similares (más precisión, riesgo de quedarse sin
+contexto); un filtro de metadatos demasiado estricto → 0 resultados (no es un
+error). Cambiar el **modelo de embeddings** rompería la comparabilidad y obliga a
+reindexar.
+
+### Cómo se evalúa
+`tests/test_retriever.py` valida sin dependencias pesadas (inyectando `embed_fn`
+y `store` falsos): la conversión distancia→score, el orden por score, el umbral,
+la reconstrucción de severidades, los filtros y el flujo completo de `retrieve()`.
+Demostración real: `python -m src.retrieve "errores 503 backend down" --top-k 3`.
+(66 pruebas en verde a la fecha.)
+
+### Limitaciones
+La recuperación densa puede fallar con **términos exactos raros** (IDs, códigos)
+donde lo léxico ayudaría; y la **calidad semántica** depende del modelo de
+embeddings (no se mide con un benchmark formal en el MVP, solo cualitativamente).
+
+### Relación con la tesis
+Materializa la **primera mitad del RAG** (recuperar evidencia citable, RNF-05)
+de forma **transparente y testeable**, dejando claro qué hace el sistema **antes**
+de introducir un LLM. Vínculo R17: OE3 · RF-07/RF-08 · Retriever · ADR-014 · P-27.
 
 ---
 

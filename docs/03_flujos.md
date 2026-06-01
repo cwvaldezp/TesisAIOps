@@ -385,6 +385,77 @@ flowchart LR
 - ↑ temperatura del LLM → respuestas más creativas pero menos deterministas.
 - Cambiar plantilla de prompt → cambia el estilo y la fidelidad de las citas.
 
+---
+
+### 3.1 Subflujo de Recuperación / Retriever (Fase 3 — implementado)
+
+> Detalle de los pasos 1–3 del flujo de consulta (Retriever). Recibe una consulta
+> textual, la embebe con el **mismo modelo local** (ADR-012), busca **top-k** por
+> similitud en Chroma (ADR-014) y devuelve los chunks con score y metadatos de
+> cita. **NO** ensambla prompt, **NO** llama a un LLM, **NO** genera respuesta
+> (eso es Fase 4). Es **solo recuperación de evidencia**.
+
+**Cuándo se ejecuta:** cada vez que el usuario lanza una consulta.
+
+**Quién lo invoca:** la CLI `python -m src.retrieve "<consulta>"`.
+
+**Entrada → Salida:** texto de consulta (+ filtros opcionales) → lista ordenada de
+chunks recuperados (score + cita), por consola.
+
+| Paso | Acción | Componente | Entrada | Salida |
+|------|--------|-----------|---------|--------|
+| 1 | Recibir consulta textual | CLI | Texto | Consulta |
+| 2 | Embeber la consulta (mismo modelo) | Embedder (ADR-012) | Texto | Vector (384-d) |
+| 3 | (Opcional) Construir filtro de metadatos | Retriever | Flags | `where` Chroma |
+| 4 | Buscar top-k por similitud | Vector store (Chroma) | Vector + k + where | ids, distancias, metadatos, documentos |
+| 5 | Convertir distancia→score y ordenar | Retriever | Respuesta Chroma | Resultados ordenados |
+| 6 | (Opcional) Filtrar por `score_threshold` | Retriever | Resultados | Resultados |
+| 7 | Mostrar con cita | CLI | Resultados | Salida al usuario |
+
+**Resultado de recuperación (por chunk):**
+
+| Campo | Significado |
+|-------|-------------|
+| `rank` | Posición (1 = más relevante) |
+| `chunk_id` | Id del chunk recuperado |
+| `score` | Similitud (mayor = mejor); derivada de la distancia y la métrica |
+| `distance` | Distancia cruda devuelta por Chroma |
+| `document` | Referencia de cita `archivo:linea_ini-linea_fin` |
+| `source_file`, `line_start`, `line_end` | Citabilidad (RNF-05) |
+| `ts_start`, `ts_end` | Rango temporal del chunk |
+| `severities` | Reconstruido desde `sev_info/warning/error` |
+
+**Conversión distancia→score** (depende de `similarity_metric`):
+`cosine` → `score = 1 - distance`; otras métricas → `score = 1/(1+distance)`
+(fallback). En el MVP la métrica por defecto es **cosine**.
+
+**Filtros básicos por metadatos** (ADR-014, opcionales): por `source_file` y por
+presencia de una severidad (`sev_error/warning/info > 0`). Se traducen al
+parámetro `where` de Chroma.
+
+### Qué puede fallar
+- Índice vacío / inexistente → 0 resultados (se informa "sin coincidencias").
+- `chromadb` o el modelo no disponibles → error claro; no toca infraestructura.
+- Consulta vacía → error de uso.
+- Filtro que excluye todo → 0 resultados (no es error).
+
+### Efecto de cambiar parámetros
+- ↑`top_k` → más resultados (más recall, más ruido).
+- ↑`score_threshold` → menos resultados, riesgo de quedarse sin evidencia.
+- Filtros de metadatos → acotan la búsqueda (precisión a costa de cobertura).
+
+```mermaid
+flowchart LR
+    Q[Consulta textual] --> EMB[Embeber con MiniLM local]
+    EMB --> QRY[Chroma query top-k + where]
+    IDX[(data/index/ Chroma)] --> QRY
+    QRY --> SCORE[distancia -> score, ordenar, umbral]
+    SCORE --> OUT[Top-k chunks con score + cita]
+```
+
+> **Sin LLM:** este subflujo termina en la lista de chunks. La generación de la
+> respuesta con citas es la Fase 4 (no implementada).
+
 ### Diagrama de secuencia (resumen)
 
 ```mermaid

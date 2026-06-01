@@ -170,13 +170,18 @@ ADR futuro (no se crea aún — YAGNI). Ver ADR-010.
   modelo de embeddings (dimensión) **obliga a reconstruir**. **Aún NO se consulta**
   (sin NL, sin RAG, sin LLM).
 
-### 3.7 Retriever
-- **Qué hace:** dada una pregunta, la embebe y consulta el vector store.
-- **Cuándo se invoca:** al inicio del pipeline de consulta.
-- **Entradas:** pregunta en lenguaje natural.
-- **Salidas:** lista de chunks relevantes (con metadatos para citar).
-- **Puede fallar si:** vector store vacío; embedder no disponible.
-- **Efecto de parámetros:** `top_k` y umbral de similitud afectan cobertura/ruido.
+### 3.7 Retriever (implementado en Fase 3 — ADR-014)
+- **Qué hace:** dada una consulta textual, la embebe (mismo modelo, ADR-012),
+  busca **top-k** por similitud en Chroma con filtros opcionales de metadatos y
+  devuelve los chunks con **score** y datos de cita. **No** genera respuestas.
+- **Cuándo se invoca:** al inicio del flujo de consulta.
+- **Quién lo invoca:** la CLI `src/retrieve.py` (`python -m src.retrieve "..."`).
+- **Entradas:** texto de consulta (+ filtros opcionales `--source`, `--severity`).
+- **Salidas:** lista ordenada de resultados (rank, score, cita, severidades).
+  Detalle en `03_flujos.md` §3.1.
+- **Puede fallar si:** índice vacío (0 resultados); Chroma/embedder no disponibles.
+- **Efecto de parámetros:** `top_k` y `score_threshold` afectan cobertura/ruido;
+  los filtros de metadatos acotan la búsqueda. **Sin LLM ni RAG generativo.**
 
 ### 3.8 Orquestador RAG
 - **Qué hace:** ensambla el contexto recuperado y construye el prompt para el LLM.

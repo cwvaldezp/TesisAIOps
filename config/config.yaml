@@ -66,6 +66,11 @@ vector_store:
   similarity_metric: "cosine"  # cosine | l2 | ip (espacio HNSW de la colección)
   collection_name: "tesisaiops"  # nombre de la colección Chroma
 
+# --- Recuperación / Retriever (ADR-014, Fase 3) ------------------------------
+retrieval:
+  top_k: 5            # nº de chunks a recuperar por consulta
+  score_threshold: 0.0  # umbral mínimo de similitud (0.0 = desactivado)
+
 # --- Seguridad ---------------------------------------------------------------
 seguridad:
   read_only: true             # Invariante del MVP (ADR-005): solo lectura
