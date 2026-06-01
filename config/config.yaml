@@ -54,6 +54,11 @@ chunking:
   chunk_size: 20               # nº de eventos por chunk
   chunk_overlap: 4             # solape en eventos (0 <= overlap < chunk_size)
 
+# --- Embeddings (ADR-012, Fase 2C) -------------------------------------------
+embeddings:
+  embedding_model: "all-MiniLM-L6-v2"  # modelo LOCAL (sentence-transformers), 384-d
+  embedding_batch_size: 32             # nº de textos por lote al codificar
+
 # --- Seguridad ---------------------------------------------------------------
 seguridad:
   read_only: true             # Invariante del MVP (ADR-005): solo lectura

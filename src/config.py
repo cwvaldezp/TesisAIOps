@@ -73,6 +73,10 @@ class Config:
     chunk_size: int = 20
     chunk_overlap: int = 4
 
+    # --- Embeddings (ADR-012, Fase 2C) ---
+    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_batch_size: int = 32
+
     # --- Seguridad ---
     read_only: bool = True
 
@@ -105,6 +109,11 @@ class Config:
             raise ValueError(
                 f"chunk_overlap debe cumplir 0 <= overlap < chunk_size "
                 f"(overlap={self.chunk_overlap}, chunk_size={self.chunk_size})."
+            )
+        # --- Embeddings (ADR-012) ---
+        if self.embedding_batch_size <= 0:
+            raise ValueError(
+                f"embedding_batch_size debe ser > 0 (es {self.embedding_batch_size})."
             )
         # Invariante de seguridad del MVP (ADR-005): el parser es solo lectura.
         if self.read_only is not True:
@@ -142,6 +151,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
     normalizacion = _section(data, "normalizacion")
     salida = _section(data, "salida")
     chunking = _section(data, "chunking")
+    embeddings = _section(data, "embeddings")
     seguridad = _section(data, "seguridad")
 
     cfg = Config(
@@ -163,6 +173,10 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
         chunk_strategy=chunking.get("chunk_strategy", Config.chunk_strategy),
         chunk_size=chunking.get("chunk_size", Config.chunk_size),
         chunk_overlap=chunking.get("chunk_overlap", Config.chunk_overlap),
+        embedding_model=embeddings.get("embedding_model", Config.embedding_model),
+        embedding_batch_size=embeddings.get(
+            "embedding_batch_size", Config.embedding_batch_size
+        ),
         read_only=seguridad.get("read_only", Config.read_only),
     )
     cfg.validate()

@@ -27,7 +27,8 @@ TesisAIOps/
 │   └── processed/              # SALIDA: eventos normalizados (regenerable)
 ├── src/
 │   ├── config.py · schema.py · parse_logs.py
-│   ├── chunker.py · chunk_logs.py   # Fase 2B (ADR-011), stdlib pura
+│   ├── chunker.py · chunk_logs.py     # Fase 2B (ADR-011), stdlib pura
+│   ├── embedder.py · embed_chunks.py  # Fase 2C (ADR-012), sentence-transformers local
 │   └── parsers/                # haproxy.py · iis.py · timeutils.py
 ├── examples/
 │   └── demo_haproxy_parser.py  # demo log -> parse_line() -> evento -> JSON
@@ -120,6 +121,22 @@ Salida: `data/processed/<nombre>.chunks.jsonl`. Cada chunk agrupa N eventos
 consecutivos (con solape) y guarda metadatos de rango (`line_start/end`,
 `ts_start/end`, `severities`, `event_lines`) + `text`. **Stdlib pura: sin
 embeddings ni librerías de IA.** Parámetros en `config.yaml` (sección `chunking`).
+
+### 6.0ter Embeddings (Fase 2C — implementado, ADR-012)
+
+```bash
+# Vectoriza el text de cada chunk: *.chunks.jsonl -> *.embeddings.jsonl
+python -m src.embed_chunks
+
+# Override del modelo:
+python -m src.embed_chunks --model all-MiniLM-L6-v2
+```
+
+Salida: `data/processed/<nombre>.embeddings.jsonl` (cada línea = `embedding` de
+384 floats + `embedding_model`/`embedding_dim` + metadatos de citabilidad del
+chunk). Usa un modelo **local** (`sentence-transformers`); la **primera vez
+descarga** el modelo (~80 MB) desde HuggingFace. **No indexa en Chroma ni hace
+RAG** (fases posteriores). Parámetros en `config.yaml` (sección `embeddings`).
 
 ### 6.1 Indexar logs (Fase 2, comando provisional)
 

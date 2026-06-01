@@ -11,13 +11,12 @@
 | Campo | Valor |
 |---|---|
 | **Fecha de la foto** | 2026-06-01 |
-| **Versión (paquete)** | `0.1.0` (`src/__init__.py`) · **hito: Fase 2B cerrada** |
-| **Último commit** | `beb0eab` chore: add gitattributes · `0f3d331` feat: close phase 2b chunker pipeline |
+| **Versión (paquete)** | `0.1.0` (`src/__init__.py`) · **hito: Fase 2C cerrada** |
 | **Rama** | `main` (sincronizada con `origin/main`) |
 | **Remoto** | https://github.com/cwvaldezp/TesisAIOps.git |
-| **Estado global** | 🟢 Pipeline de **ingesta → parseo → normalización → chunking** funcional. Sin IA todavía. |
-| **Próximo objetivo** | **Fase 2C — Embeddings (ADR-012)** |
-| **Hito siguiente previsto** | **Fase 2C — Embeddings** (requiere aprobar `sentence-transformers`) |
+| **Estado global** | 🟢 Pipeline **ingesta → parseo → normalización → chunking → embeddings** funcional (embeddings locales). Sin vector store ni RAG todavía. |
+| **Próximo objetivo** | **Fase 2D — Vector store: Chroma (ADR-013)** |
+| **Hito siguiente previsto** | **Fase 2D — Vector store** (requiere aprobar `chromadb`) |
 
 > **Versión:** se mantiene **`__version__ = "0.1.0"`** de forma deliberada (no se
 > sube a 0.2.0 en este hito). El avance de fase se rastrea por esta fotografía y
@@ -36,17 +35,18 @@
 | 1.3 | Conformidad ADR-010 IIS · **Fase 1 cerrada** | tests de conformidad IIS | ✅ |
 | 2A | Diseño IA (chunking/embeddings/vector store/recuperación) | ADR-011, 012, 013, 014 | ✅ (diseño) |
 | 2B | Chunker (stdlib, sin IA) | `src/chunker.py`, `src/chunk_logs.py` | ✅ |
+| 2C | Embedder (sentence-transformers local, 384-d) | `src/embedder.py`, `src/embed_chunks.py` | ✅ |
 
 **Flujos demostrables hoy:**
 - `log (HAProxy/IIS) → parse_line() → evento normalizado (13 campos) → JSON`
 - `*.events.jsonl → Chunker → *.chunks.jsonl`
+- `*.chunks.jsonl → Embedder → *.embeddings.jsonl` (embeddings + metadata)
 
 ## Fases pendientes
 
 | Fase | Descripción | Requisito(s) | ADR | Prerrequisito |
 |------|-------------|--------------|-----|---------------|
-| **2C** | **Embedder** (vectorizar chunks) | RF-05 | ADR-012 | **Instalar `sentence-transformers`** (requiere aprobación) |
-| 2D | Vector store (indexar) | RF-06 | ADR-013 | Instalar `chromadb` |
+| **2D** | **Vector store** (indexar embeddings) | RF-06 | ADR-013 | **Instalar `chromadb`** (requiere aprobación) |
 | 3 | Retriever (recuperación) | RF-08, RF-07 | ADR-014 | — |
 | 4 | Capa LLM (respuesta con citas) | RF-09, RF-10, RF-11 | _(pendiente ADR)_ | Decidir modelo LLM |
 | 5 | Interfaz de consulta + demo | RF-12, RF-07 | ADR-006 | — |
@@ -66,15 +66,15 @@
 | 009 | Revisión multi-rol + Definition of Done | Aceptada |
 | 010 | Esquema de evento (13 campos) | Aceptada · **implementado** |
 | 011 | Chunking por ventana de eventos | Aceptada · **implementado (2B)** |
-| 012 | Embeddings locales (MiniLM) | Aceptada (diseño) |
+| 012 | Embeddings locales (MiniLM) | Aceptada · **implementado (2C)** |
 | 013 | Vector store Chroma | Aceptada (diseño) |
 | 014 | Recuperación top-k + filtros | Aceptada (diseño) |
 
 > Pendiente de decisión (sin ADR aún): **modelo LLM** (Fase 4).
 
-## Preguntas de defensa (24)
+## Preguntas de defensa (25)
 
-`P-01 … P-24` en [`98_PREGUNTAS_DEFENSA.md`](98_PREGUNTAS_DEFENSA.md), en formato
+`P-01 … P-25` en [`98_PREGUNTAS_DEFENSA.md`](98_PREGUNTAS_DEFENSA.md), en formato
 tribunal (7 facetas a partir de R16). Cobertura por tema:
 
 | Rango | Tema |
@@ -87,21 +87,22 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 | P-18 | Normalización **antes** que IA |
 | P-19..P-23 | Decisiones de Fase 2A (chunking, embeddings, Chroma vs FAISS, recuperación) |
 | P-24 | Diseño del chunker (agrupación por archivo + metadatos) |
+| P-25 | Cómo se prueba el Embedder sin el modelo real (inyección de `encode_fn`) |
 
 ## Métricas actuales
 
 | Métrica | Valor |
 |---|---|
-| Pruebas (pytest) | **40 / 40 en verde** |
-| Archivos de prueba | 7 (`tests/test_*.py`) |
-| Módulos Python (`src/`) | 10 |
+| Pruebas (pytest) | **48 / 48 en verde** |
+| Archivos de prueba | 9 (`tests/test_*.py`) |
+| Módulos Python (`src/`) | 12 |
 | Scripts de ejemplo | 1 (`examples/demo_haproxy_parser.py`) |
-| Documentos (`docs/`) | 12 `.md` + 3 diagramas `.mmd` |
+| Documentos (`docs/`) | 13 `.md` + 3 diagramas `.mmd` |
 | ADRs | 14 |
-| Preguntas de defensa | 24 |
-| Requisitos funcionales cumplidos | RF-01, RF-02, RF-03, RF-04 (4 / 12) |
-| Commits | 2 |
-| Dependencias externas | PyYAML, pytest (sin librerías de IA todavía) |
+| Preguntas de defensa | 25 |
+| Requisitos funcionales cumplidos | RF-01…RF-05 (5 / 12) |
+| Commits | 3 |
+| Dependencias externas | PyYAML, pytest, **sentence-transformers** (Fase 2C) |
 
 **Cobertura de requisitos funcionales:**
 
@@ -111,7 +112,7 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 | RF-02 | Ingerir IIS | ✅ |
 | RF-03 | Normalizar a esquema común | ✅ |
 | RF-04 | Chunking | ✅ |
-| RF-05 | Embeddings | 📋 (diseño ✅) |
+| RF-05 | Embeddings | ✅ |
 | RF-06 | Indexar (vector store) | 📋 (diseño ✅) |
 | RF-07 | Consulta en lenguaje natural | 📋 |
 | RF-08 | Recuperar chunks | 📋 (diseño ✅) |
@@ -122,23 +123,26 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 
 ---
 
-## Próximo objetivo: Fase 2C — Embeddings
+## Próximo objetivo: Fase 2D — Vector store (Chroma)
 
-**Qué:** implementar el **Embedder** (ADR-012): convertir el `text` de cada chunk
-(`*.chunks.jsonl`) en un vector con un modelo **local** `all-MiniLM-L6-v2`
-(384 dimensiones).
+**Qué:** implementar la indexación de los `*.embeddings.jsonl` en **Chroma**
+(ADR-013), local y persistente, guardando junto a cada vector sus metadatos de
+citabilidad (`source_file`, `line_start/end`, `ts_*`, `severities`).
 
-**Por qué ahora:** es el paso natural tras el chunking — el chunk es la unidad de
-texto lista para vectorizar. Habilita después la indexación (2D) y la recuperación
-(3), el corazón del RAG.
+**Por qué ahora:** es el paso natural tras los embeddings — ya tenemos vectores +
+metadatos; falta un índice que permita buscar por similitud (base de la
+recuperación, Fase 3).
 
-**Prerrequisito (bloqueante):** instalar `sentence-transformers`. Por las reglas
-del proyecto, **requiere aprobación explícita** antes de añadir la dependencia; se
-hará en su propio paso verificable, manteniendo el chunker como entrada estable.
+**Prerrequisito (bloqueante):** instalar `chromadb`. Por las reglas del proyecto,
+**requiere aprobación explícita** antes de añadir la dependencia; se hará en su
+propio paso verificable, manteniendo `*.embeddings.jsonl` como entrada estable.
 
 **Riesgos / notas:**
-- Cambiar el modelo de embeddings cambia la dimensión y **obliga a reindexar**.
-- Embeddings locales por **privacidad** (los logs no salen del equipo, ADR-012).
+- Cambiar el modelo de embeddings (dimensión) obliga a **reconstruir** el índice.
+- Sigue **sin RAG ni LLM**: 2D solo indexa; la consulta es Fase 3+.
+
+**Estado de Fase 2C (cerrada):** Embedder local funcional, 384-d, salida
+`*.embeddings.jsonl` con metadatos; lógica probada sin cargar el modelo (P-25).
 
 ---
 

@@ -82,17 +82,20 @@ Configurado en `config.yaml` sección `chunking` (cargado por `src/config.py`).
 > cargar). Override por CLI: `--chunk-size`, `--chunk-overlap`. Chunks grandes →
 > más contexto, menor precisión.
 
-## 6. Embeddings — decidido en **ADR-012** (Fase 2A, diseño)
+## 6. Embeddings — **ADR-012** (decidido Fase 2A · **implementado Fase 2C**)
+
+Configurado en `config.yaml` sección `embeddings` (cargado por `src/config.py`).
 
 | Parámetro | Qué controla | Default (ADR-012) | Opciones/Rango | Reindexa | Sensibilidad |
 |---|---|---|---|---|---|
 | `embedding_model` | Modelo que genera los vectores | `all-MiniLM-L6-v2` (local) | local/API | **Sí** | Alta |
-| `embedding_dim` | Dimensión del vector (deriva del modelo) | `384` | entero | **Sí** | Alta |
-| `embedding_batch_size` | Nº de chunks por lote al vectorizar | `32` | entero > 0 | No | Baja |
+| `embedding_dim` | Dimensión del vector (deriva del modelo, no se configura) | `384` | entero | **Sí** | Alta |
+| `embedding_batch_size` | Nº de textos por lote al vectorizar | `32` | entero > 0 | No | Baja |
 
-> **Decidido (ADR-012):** embeddings **locales** (privacidad, coste cero,
-> reproducibilidad). Cambiar `embedding_model` cambia la dimensión y **siempre**
-> obliga a reindexar. (No instalado todavía: decisión de diseño.)
+> **Implementado (Fase 2C):** embeddings **locales** (privacidad, coste cero,
+> reproducibilidad) con `sentence-transformers`. `embedding_dim` **deriva** del
+> modelo (no se configura). Cambiar `embedding_model` cambia la dimensión y
+> **siempre** obliga a reindexar. Override por CLI: `--model`.
 
 ## 7. Vector store — decidido en **ADR-013** (Fase 2A, diseño)
 

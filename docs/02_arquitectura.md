@@ -138,14 +138,20 @@ ADR futuro (no se crea aún — YAGNI). Ver ADR-010.
 - **Efecto de parámetros:** `chunk_size`/`chunk_overlap` afectan recall, precisión
   y coste; cambiarlos obliga a re-chunkear. Implementado con **stdlib pura** (sin IA).
 
-### 3.5 Embedder
-- **Qué hace:** convierte el texto de cada chunk en un vector (embedding).
-- **Cuándo se invoca:** tras el chunking.
-- **Entradas:** texto del chunk.
-- **Salidas:** vector de dimensión fija + referencia al chunk.
-- **Puede fallar si:** el modelo de embeddings no está disponible; texto vacío.
-- **Efecto de parámetros:** el **modelo** de embeddings define dimensión, calidad,
-  coste y latencia.
+### 3.5 Embedder (implementado en Fase 2C — ADR-012)
+- **Qué hace:** convierte el `text` de cada chunk en un vector (embedding) con un
+  modelo **local** (`all-MiniLM-L6-v2`, 384-d), arrastrando los metadatos.
+- **Cuándo se invoca:** tras el chunking, sobre los `*.chunks.jsonl`.
+- **Quién lo invoca:** el orquestador `src/embed_chunks.py` (`python -m src.embed_chunks`).
+- **Entradas:** chunks (de `data/processed/*.chunks.jsonl`).
+- **Salidas:** registros `embedding` + metadatos (`data/processed/*.embeddings.jsonl`).
+  Esquema completo en `03_flujos.md` §2.3.
+- **Puede fallar si:** el modelo no está disponible (no instalado / sin red la 1ª
+  vez); `processed_path` sin chunks.
+- **Efecto de parámetros:** `embedding_model` define dimensión/semántica (cambiarlo
+  **obliga a reindexar**); `embedding_batch_size` solo afecta velocidad/memoria.
+  Embeddings **locales** por privacidad (los logs no salen del equipo). **Aún NO
+  indexa en Chroma** (Fase 2D).
 
 ### 3.6 Vector store
 - **Qué hace:** almacena embeddings + metadatos y permite búsqueda por similitud.

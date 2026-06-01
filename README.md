@@ -72,11 +72,11 @@ TesisAIOps/
 
 ## 5. Estado actual
 
-🟢 **Fase 2B — Chunker implementado (ADR-011).**
-Tras la Fase 1 (parsers conformes a ADR-010), el **Chunker** agrupa los eventos
-normalizados en chunks (ventana de N eventos con solape) listos para la futura
-indexación (RF-04). Es **stdlib pura: sin embeddings, sin vector store, sin IA.**
-**40 pruebas en verde.**
+🟢 **Fase 2C — Embedder implementado (ADR-012).**
+Tras parseo (Fase 1) y chunking (Fase 2B), el **Embedder** vectoriza el texto de
+cada chunk con un modelo **local** `all-MiniLM-L6-v2` (384-d) y arrastra los
+metadatos de citabilidad (RF-05). **Aún NO hay Chroma ni RAG** (fases
+posteriores). **48 pruebas en verde** (la lógica se prueba sin cargar el modelo).
 
 Ejecutar:
 
@@ -84,14 +84,15 @@ Ejecutar:
 pip install -r requirements.txt
 python -m src.parse_logs                  # logs -> eventos: ./data/processed/*.events.jsonl
 python -m src.chunk_logs                  # eventos -> chunks: ./data/processed/*.chunks.jsonl
-python -m src.chunk_logs --chunk-size 5 --chunk-overlap 1   # overrides para demo
+python -m src.embed_chunks                # chunks -> embeddings: ./data/processed/*.embeddings.jsonl
 python -m examples.demo_haproxy_parser    # demo parser: log -> parse_line() -> evento -> JSON
-python -m pytest -q                       # ejecuta las 40 pruebas
+python -m pytest -q                       # ejecuta las 48 pruebas
 ```
 
 Flujos demostrables:
 - `log (HAProxy/IIS) → parse_line() → evento normalizado → JSON` (Fase 1)
 - `*.events.jsonl → Chunker → *.chunks.jsonl` (Fase 2B)
+- `*.chunks.jsonl → Embedder → *.embeddings.jsonl` (embeddings + metadata) (Fase 2C)
 
 ## 6. Reglas de trabajo del proyecto
 

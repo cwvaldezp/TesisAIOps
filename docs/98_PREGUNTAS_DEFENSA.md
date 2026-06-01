@@ -54,6 +54,7 @@ objetivo, requisito y componente para trazabilidad de punta a punta.
 | P-22 | ¿Por qué esta estrategia de recuperación (top-k + filtros)? | ADR-014 | Decidido (diseño) |
 | P-23 | ¿Por qué Chroma y no FAISS? (comparativa) | ADR-013 | Decidido (diseño) |
 | P-24 | ¿Por qué el chunker agrupa por archivo y conserva metadatos de rango? | ADR-011 / Fase 2B | Decidido |
+| P-25 | ¿Cómo se prueba el Embedder sin depender del modelo real? | ADR-012 / Fase 2C | Decidido |
 
 ---
 
@@ -981,6 +982,60 @@ abarcar un intervalo amplio si hay huecos (mejora futura: corte por tiempo).
 ### Relación con la tesis
 Conecta la normalización (ADR-010) con la recuperación citable (ADR-014): el
 chunk es la **unidad de evidencia** del sistema.
+
+---
+
+## P-25
+
+### Pregunta
+¿Cómo se prueba el Embedder sin depender del modelo real (que pesa cientos de MB
+y requiere descarga)?
+
+### Respuesta corta
+**Separando la lógica de la dependencia pesada:** la orquestación recibe una
+**función de codificación inyectada** (`encode_fn`); en producción es el modelo
+real, en los tests es una función falsa determinista. Así las pruebas son
+rápidas, **offline** y reproducibles.
+
+### Respuesta técnica
+`src/embedder.py` separa dos cosas: (1) `Embedder`, que carga
+`sentence-transformers` con **import perezoso** (solo al usarse de verdad); y (2)
+la lógica pura `embed_chunks(chunks, encode_fn, model_name)` y
+`build_embedding_record(...)`, que **no importan** la librería. Los tests
+(`tests/test_embedder.py`) inyectan una `encode_fn` falsa (vector determinista de
+dimensión 3) y validan: un registro por chunk, herencia de metadatos, el esquema
+del registro, el caso de texto vacío y la detección de desajustes vector↔chunk.
+El flujo con el modelo real se valida de forma demostrativa (la CLI imprime la
+dimensión 384). Esto aplica un patrón de **inversión de dependencias** clásico,
+clave para testear componentes de IA de forma barata.
+
+### Alternativas consideradas
+- Cargar el modelo real en cada test.
+- Hacer mock del módulo `sentence_transformers` con `unittest.mock`.
+
+### Por qué no se eligieron
+- *Modelo real en tests:* lento, requiere red/descarga, frágil en CI; rompe la
+  reproducibilidad.
+- *Mock del módulo:* funciona, pero es más opaco que inyectar una función simple;
+  la inyección hace explícito el contrato (`textos -> vectores`).
+
+### Impacto si se cambia un parámetro
+Cambiar `embedding_model` cambia la **dimensión** del vector real y obliga a
+reindexar; los tests de lógica no se ven afectados (usan dimensión arbitraria).
+
+### Cómo se valida
+`python -m pytest -q` (48 pruebas, offline). Demostración real:
+`python -m src.embed_chunks` (imprime `Dimensión = 384` y escribe
+`*.embeddings.jsonl`).
+
+### Limitaciones
+Las pruebas no verifican la **calidad semántica** de los embeddings reales (eso
+exige un set de evaluación); validan la **integración y el contrato**, no la
+relevancia. La calidad se medirá al evaluar la recuperación (Fase 3).
+
+### Relación con la tesis
+Demuestra ingeniería de calidad sobre un componente de IA: el sistema es
+**testeable y reproducible** sin coste de cómputo, atributo defendible (RNF-08).
 
 ---
 

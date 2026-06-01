@@ -235,6 +235,68 @@ flowchart LR
 
 ---
 
+## 2.3 Subflujo de Embeddings (Fase 2C — implementado)
+
+> Detalle del paso 5 del pipeline de indexación (Embedder). Convierte el `text`
+> de cada chunk en un **vector** (embedding) con un modelo **local** (ADR-012).
+> **NO** indexa en Chroma ni hace RAG todavía (fases posteriores).
+
+**Cuándo se ejecuta:** tras el chunker, sobre los `*.chunks.jsonl`.
+
+**Quién lo invoca:** el orquestador `python -m src.embed_chunks`.
+
+**Entrada → Salida:** `data/processed/<stem>.chunks.jsonl` →
+`data/processed/<stem>.embeddings.jsonl` (embeddings + metadatos).
+
+### Pasos detallados
+
+| Paso | Acción | Entrada | Salida |
+|------|--------|---------|--------|
+| 1 | Listar `*.chunks.jsonl` | `processed_path` | Lista de archivos de chunks |
+| 2 | Cargar chunks (un objeto por línea) | JSONL | Lista de chunks |
+| 3 | Cargar modelo local de embeddings (una vez) | `embedding_model` | Modelo en memoria |
+| 4 | Vectorizar el `text` de cada chunk (por lotes) | textos | vectores (float[]) |
+| 5 | Combinar vector + metadatos del chunk | chunk + vector | registro de embedding |
+| 6 | Serializar a JSONL | registros | `<stem>.embeddings.jsonl` |
+
+### Esquema del registro de embedding (Fase 2C)
+
+| Campo | Tipo | Significado |
+|-------|------|-------------|
+| `chunk_id` | string | Id del chunk de origen (enlace 1:1) |
+| `embedding` | list[float] | Vector del `text` del chunk |
+| `embedding_model` | string | Modelo usado (p. ej. `all-MiniLM-L6-v2`) |
+| `embedding_dim` | int | Dimensión del vector (p. ej. 384) |
+| `source_file` | string | Heredado del chunk (citabilidad) |
+| `line_start` / `line_end` | int | Heredados del chunk (citabilidad) |
+| `ts_start` / `ts_end` | string\|null | Heredados del chunk (filtros futuros) |
+| `severities` | dict | Heredado del chunk (filtros futuros) |
+
+> Se **arrastran los metadatos de citabilidad/filtrado** del chunk para que, en
+> la Fase 2D (Chroma) y el RAG, cada vector siga apuntando a su evidencia.
+
+### Qué puede fallar
+
+- `processed_path` sin `*.chunks.jsonl` → error claro y aborta.
+- Modelo de embeddings no disponible (no instalado / sin red la 1ª vez) → error
+  claro; **no** toca infraestructura.
+- Chunk sin `text` → se vectoriza cadena vacía (vector válido) y se reporta.
+
+### Efecto de cambiar parámetros
+
+- `embedding_model` → cambia **dimensión** y semántica; **obliga a reindexar**.
+- `embedding_batch_size` → solo afecta velocidad/memoria, no el resultado.
+
+```mermaid
+flowchart LR
+    CK[(chunks *.chunks.jsonl)] --> LM[Cargar modelo local MiniLM]
+    LM --> ENC[Codificar text por lotes]
+    ENC --> MERGE[Vector + metadatos del chunk]
+    MERGE --> EMB[(*.embeddings.jsonl)]
+```
+
+---
+
 ## 3. Flujo de Consulta (online)
 
 **Cuándo se ejecuta:** cada vez que el usuario formula una pregunta.
