@@ -56,6 +56,9 @@ class Config:
     # --- Ingesta ---
     logs_path: str = "./data/logs"
     file_pattern: str = "*.log"
+    # Fase 3.5: corpus real organizado en subcarpetas por app y con .gz rotados.
+    file_patterns: list[str] = field(default_factory=list)  # vacío -> [file_pattern]
+    recursive: bool = False  # True -> explora subcarpetas (rglob)
     encoding: str = "utf-8"
     source_type: str = "auto"
 
@@ -154,6 +157,14 @@ class Config:
                 "(invariante ADR-005)."
             )
 
+    def effective_patterns(self) -> list[str]:
+        """Patrones glob efectivos para descubrir logs (Fase 3.5).
+
+        Usa `file_patterns` si está definido (lista); si no, cae al
+        `file_pattern` único (compatibilidad con la config de Fase 1).
+        """
+        return list(self.file_patterns) if self.file_patterns else [self.file_pattern]
+
 
 def _section(data: dict[str, Any], name: str) -> dict[str, Any]:
     """Devuelve una sección del YAML como dict (vacío si falta)."""
@@ -191,6 +202,8 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
     cfg = Config(
         logs_path=ingesta.get("logs_path", Config.logs_path),
         file_pattern=ingesta.get("file_pattern", Config.file_pattern),
+        file_patterns=ingesta.get("file_patterns", []),
+        recursive=ingesta.get("recursive", Config.recursive),
         encoding=ingesta.get("encoding", Config.encoding),
         source_type=ingesta.get("source_type", Config.source_type),
         haproxy_log_format=parsing.get("haproxy_log_format", Config.haproxy_log_format),

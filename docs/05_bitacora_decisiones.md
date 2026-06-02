@@ -45,6 +45,7 @@ Estados: `Propuesta` → `Aceptada`/`Rechazada`. Una decisión puede ser
 | ADR-012 | Embeddings locales (sentence-transformers MiniLM) | Aceptada (diseño) | 2026-06-01 |
 | ADR-013 | Vector store local: Chroma (persistente) | Aceptada (diseño) | 2026-06-01 |
 | ADR-014 | Estrategia de recuperación (top-k denso + filtros de metadatos) | Aceptada · **implementado (Fase 3)** | 2026-06-01 |
+| ADR-015 | Soporte de corpus real: lectura `.gz`, cabeceras capturadas HAProxy, ingesta recursiva | Aceptada · **implementado (Fase 3.5)** | 2026-06-02 |
 
 ---
 
@@ -449,6 +450,58 @@ Estados: `Propuesta` → `Aceptada`/`Rechazada`. Una decisión puede ser
   `top_k`/`score_threshold` externalizados (sección `retrieval` de `config.yaml`).
   **Solo recuperación de evidencia: sin prompt, sin LLM** (eso es Fase 4).
   **66 pruebas en verde.**
+
+### ADR-015 · Soporte de corpus real: lectura `.gz`, cabeceras capturadas HAProxy e ingesta recursiva
+- **Fecha:** 2026-06-02 · **Estado:** Aceptada · **implementado (Fase 3.5, 2026-06-02)**
+- **Contexto:** Hasta la Fase 3 el pipeline se probó con **logs sintéticos**. Al
+  incorporar el **corpus real** (logs del balanceador HAProxy de la USFQ, 269
+  archivos) aparecieron tres desajustes que impedían procesarlo:
+  1. Los logs reales se distribuyen **comprimidos** (`.log` vigente + decenas de
+     `.log-YYYYMMDD.gz` rotados) y en **una subcarpeta por aplicación**.
+  2. El formato real de HAProxy incluye **cabeceras capturadas** (`capture request
+     header`, típicamente el `Host`): uno o dos bloques `{...}` entre las colas y
+     la petición. El regex del sample sintético **no** los contemplaba → **el
+     100 % de las líneas reales caía como no parseable** (0 eventos con `skip`).
+  3. La **autodetección por nombre** clasificaba como IIS cualquier archivo cuyo
+     nombre contuviera "iis" (p. ej. `app-portal-sitios-iis-devl`), aunque su
+     **contenido es HAProxy** (el "iis" es el *backend* Windows, no el formato).
+- **Decisión:**
+  1. **Lectura transparente de `.gz`** con `gzip` (stdlib) según la extensión,
+     sin descomprimir a disco; bytes no decodificables se reemplazan
+     (`errors='replace'`) para no abortar por una línea con basura. Nuevo módulo
+     `src/ingest.py` (`read_log_lines`, `discover_log_files`).
+  2. **Ingesta recursiva y multi-patrón** opcional (`recursive`, `file_patterns`)
+     para recorrer las subcarpetas por aplicación y elegir extensiones.
+  3. **Regex HAProxy tolerante** a 0, 1 o 2 bloques `{...}` de cabeceras
+     capturadas — **retrocompatible** con líneas sin captura.
+  4. Para esta validación, **tratar todo el corpus como HAProxy** (`--source
+     haproxy`): es lo que realmente es. La validación W3C-IIS verdadera se
+     pospone hasta disponer de un log W3C real (no existe en el corpus actual).
+  5. Nuevo arnés `src/validate_corpus.py` que mide el pipeline de extremo a
+     extremo (**sin LLM**): eventos, chunks, embeddings y **tiempo de indexación**.
+- **Justificación técnica:** sin descompresión y sin tolerar cabeceras
+  capturadas, el corpus real daría **cero evidencia**; el resto del MVP (chunking,
+  embeddings, índice, recuperación) ya estaba listo y solo dependía de poder
+  **ingerir el formato real**. Mantener la corrección **retrocompatible** evita
+  romper los tests/sample de Fase 1. Sin librerías nuevas (gzip es stdlib).
+- **Alternativas consideradas:** (a) descomprimir los `.gz` a disco en un paso
+  previo; (b) reescribir el parser con una gramática completa de HAProxy; (c)
+  forzar el archivo "iis" por el parser IIS.
+- **Por qué no se eligieron:** (a) duplica datos en disco y añade un paso manual;
+  (b) excesivo para el MVP (Regla 10) cuando basta extender el patrón; (c)
+  produciría 0 eventos porque su contenido es HAProxy, no W3C.
+- **Qué pasa si se cambia un parámetro:** `file_patterns`/`recursive` cambian qué
+  archivos entran (volumen → tiempo de indexación); incluir `*.gz` multiplica el
+  corpus. La corrección del regex no altera los campos extraídos.
+- **Cómo se evalúa:** `tests/test_ingest.py` (lectura `.gz`/plano, descubrimiento
+  recursivo) y casos reales en `tests/test_haproxy_parser.py` (cabeceras
+  capturadas, 1 y 2 bloques). Medición end-to-end en `docs/91_VALIDACION_CORPUS.md`.
+- **Limitaciones:** la severidad/citabilidad no cambian; el corpus actual es
+  **HAProxy-only** (sin W3C-IIS real); el filtrado por fecha del rotado `.gz`
+  queda como mejora futura. NO se rompe el invariante de solo-lectura (ADR-005).
+- **Afecta a:** RF-01/RF-02 (ingesta); parámetros `file_patterns`, `recursive`.
+  **Vínculo R17:** OE1 · RF-01 · Ingesta (`src/ingest.py`, `src/parse_logs.py`) ·
+  ADR-015 · P-28.
 
 ---
 

@@ -22,6 +22,23 @@ LINE_503 = (
     '- - SC-- 20/20/9/0/0 0/0 "GET /api/v1/orders HTTP/1.1"'
 )
 
+# Fase 3.5: línea REAL del balanceador con cabecera capturada {host} entre las
+# colas y la petición, frontend con tilde (https_in~) y backend Windows/IIS.
+LINE_REAL_CAPTURED = (
+    "May 18 09:59:25 t-lb-app-srv-02 haproxy[2097705]: 172.21.210.39:51615 "
+    "[18/May/2026:09:59:25.909] https_in~ windows_app_portal_sitios_iis_devl/D-ACC-FEN-01 "
+    "0/0/4/58/62 200 5889 - - ---- 16/10/1/1/0 0/0 "
+    '{app-portal-sitios-iis-devl.usfq.edu.ec} "GET /favicon.ico HTTP/1.1"'
+)
+
+# Variante con DOS bloques de cabeceras capturadas (request + response).
+LINE_REAL_TWO_CAPTURES = (
+    "May 18 08:26:38 t-lb-app-srv-02 haproxy[2097705]: 172.21.10.135:55192 "
+    "[18/May/2026:08:26:37.889] https_in~ windows_api_polladeployer_test/T-WS-01 "
+    "0/0/4/184/188 401 849 - - ---- 11/7/0/0/0 0/0 "
+    '{api-polla-deployer-test.usfq.edu.ec} {nginx} "GET /api/notificaciones HTTP/2.0"'
+)
+
 
 def test_haproxy_linea_valida():
     parser = HAProxyParser(timezone="UTC")
@@ -51,6 +68,33 @@ def test_haproxy_503_sin_servidor():
     assert ev["backend"] == "be_api/<NOSRV>"
     # Tt es 0 aquí; los timers intermedios -1 no deben romper el parseo.
     assert ev["duration_ms"] == 0
+
+
+def test_haproxy_real_con_cabecera_capturada():
+    """Fase 3.5: el formato real con {host} capturado debe parsear (antes fallaba)."""
+    parser = HAProxyParser()
+    status, ev = parser.parse_line(
+        LINE_REAL_CAPTURED, line_number=2, source_file="app-portal-sitios-iis-devl.log"
+    )
+    assert status == STATUS_OK
+    assert ev["client_ip"] == "172.21.210.39"
+    assert ev["status_code"] == 200
+    assert ev["method"] == "GET"
+    assert ev["path"] == "/favicon.ico"
+    assert ev["backend"] == "windows_app_portal_sitios_iis_devl/D-ACC-FEN-01"
+    assert ev["timestamp"] == "2026-05-18T09:59:25+00:00"
+
+
+def test_haproxy_real_dos_bloques_capturados():
+    """Dos bloques {req} {res} de cabeceras capturadas también parsean."""
+    parser = HAProxyParser()
+    status, ev = parser.parse_line(
+        LINE_REAL_TWO_CAPTURES, line_number=3, source_file="api-polla.log"
+    )
+    assert status == STATUS_OK
+    assert ev["status_code"] == 401
+    assert ev["severity"] == "warning"
+    assert ev["method"] == "GET"
 
 
 def test_haproxy_linea_vacia_es_skip():

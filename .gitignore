@@ -18,6 +18,14 @@ htmlcov/
 .env
 config/.env
 
+# Corpus REAL de logs (Fase 3.5): NO versionar — datos sensibles (IPs/hosts
+# internos, endpoints reales) y voluminosos. Se conservan SOLO los samples
+# sintéticos anonimizados usados por los tests/demo.
+data/logs/*
+!data/logs/.gitkeep
+!data/logs/haproxy_sample.log
+!data/logs/iis_sample.log
+
 # Salida del parser (datos derivados, regenerables)
 data/processed/*
 !data/processed/.gitkeep

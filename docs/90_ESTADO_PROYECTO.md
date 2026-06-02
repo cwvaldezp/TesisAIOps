@@ -10,11 +10,11 @@
 
 | Campo | Valor |
 |---|---|
-| **Fecha de la foto** | 2026-06-01 |
-| **Versión (paquete)** | `0.1.0` (`src/__init__.py`) · **hito: Fase 3 cerrada** |
+| **Fecha de la foto** | 2026-06-02 |
+| **Versión (paquete)** | `0.1.0` (`src/__init__.py`) · **hito: Fase 3.5 (validación con corpus real)** |
 | **Rama** | `main` (sincronizada con `origin/main`) |
 | **Remoto** | https://github.com/cwvaldezp/TesisAIOps.git |
-| **Estado global** | 🟢 **Recuperación de evidencia FUNCIONAL**: parseo → normalización → chunking → embeddings → índice **Chroma** → **Retriever top-k + filtros (CLI)**. Consulta textual operativa; **sin RAG generativo, sin LLM**. |
+| **Estado global** | 🟢 **Pipeline VALIDADO con corpus real**: parseo → … → índice Chroma → Retriever, ejecutado sobre logs HAProxy reales (27 280 eventos, 1 706 chunks). **Sin RAG generativo, sin LLM**. |
 | **Próximo objetivo** | **Fase 4 — Capa LLM (respuesta con citas, RF-09/10/11)** |
 | **Hito siguiente previsto** | **Fase 4 — LLM + respuesta con citas** (requiere decidir el modelo LLM vía ADR) |
 
@@ -38,6 +38,7 @@
 | 2C | Embedder (sentence-transformers local, 384-d) | `src/embedder.py`, `src/embed_chunks.py` | ✅ |
 | 2D | Vector store Chroma (local persistente, upsert) | `src/vector_store.py`, `src/index_embeddings.py` | ✅ |
 | 3 | Retriever (recuperación top-k + filtros, **sin LLM**) | `src/retriever.py`, `src/retrieve.py` | ✅ |
+| 3.5 | Validación con corpus real HAProxy (`.gz`, cabeceras capturadas, medición) | `src/ingest.py`, `src/validate_corpus.py`, `docs/91_VALIDACION_CORPUS.md` | ✅ |
 
 **Flujos demostrables hoy:**
 - `log (HAProxy/IIS) → parse_line() → evento normalizado (13 campos) → JSON`
@@ -53,7 +54,7 @@
 | **4** | **Capa LLM (respuesta con citas)** | RF-09, RF-10, RF-11 | _(pendiente ADR)_ | Decidir modelo LLM |
 | 5 | Interfaz de consulta + demo | RF-12 | ADR-006 | — |
 
-## ADRs cerrados (14)
+## ADRs cerrados (15)
 
 | ADR | Decisión | Estado |
 |-----|----------|--------|
@@ -71,12 +72,13 @@
 | 012 | Embeddings locales (MiniLM) | Aceptada · **implementado (2C)** |
 | 013 | Vector store Chroma | Aceptada · **implementado (2D)** |
 | 014 | Recuperación top-k + filtros | Aceptada · **implementado (3)** |
+| 015 | Corpus real: `.gz` + cabeceras capturadas + ingesta recursiva | Aceptada · **implementado (3.5)** |
 
 > Pendiente de decisión (sin ADR aún): **modelo LLM** (Fase 4).
 
-## Preguntas de defensa (27)
+## Preguntas de defensa (28)
 
-`P-01 … P-27` en [`98_PREGUNTAS_DEFENSA.md`](98_PREGUNTAS_DEFENSA.md), en formato
+`P-01 … P-28` en [`98_PREGUNTAS_DEFENSA.md`](98_PREGUNTAS_DEFENSA.md), en formato
 tribunal (7 facetas a partir de R16). Cobertura por tema:
 
 | Rango | Tema |
@@ -92,21 +94,23 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 | P-25 | Cómo se prueba el Embedder sin el modelo real (inyección de `encode_fn`) |
 | P-26 | Metadatos en Chroma (aplanado) y upsert idempotente |
 | P-27 | Consulta textual → evidencia recuperada **sin LLM** (Retriever, Fase 3) |
+| P-28 | Validación con corpus real: desajustes vs. sintéticos (`.gz`, cabeceras capturadas) |
 
 ## Métricas actuales
 
 | Métrica | Valor |
 |---|---|
-| Pruebas (pytest) | **66 / 66 en verde** |
-| Archivos de prueba | 12 (`tests/test_*.py`) |
-| Módulos Python (`src/`) | 16 (incluye `src/retriever.py`, `src/retrieve.py`) |
+| Pruebas (pytest) | **73 / 73 en verde** |
+| Archivos de prueba | 13 (`tests/test_*.py`) |
+| Módulos Python (`src/`) | 18 (incluye `src/ingest.py`, `src/validate_corpus.py`) |
 | Scripts de ejemplo | 1 (`examples/demo_haproxy_parser.py`) |
-| Documentos (`docs/`) | 13 `.md` + 3 diagramas `.mmd` |
-| ADRs | 14 |
-| Preguntas de defensa | 27 |
+| Documentos (`docs/`) | 12 `.md` + 3 diagramas `.mmd` |
+| ADRs | 15 |
+| Preguntas de defensa | 28 |
 | Requisitos funcionales cumplidos | RF-01…RF-08 (8 / 12) |
-| Commits | 5 |
-| Dependencias externas | PyYAML, pytest, sentence-transformers, chromadb (**sin nuevas en Fase 3**) |
+| Commits | 6 |
+| Dependencias externas | PyYAML, pytest, sentence-transformers, chromadb (**sin nuevas en Fase 3.5**; `gzip` es stdlib) |
+| Validación corpus real | 27 280 eventos · 1 706 chunks · indexación 2,2 s (ver `91_VALIDACION_CORPUS.md`) |
 
 **Cobertura de requisitos funcionales:**
 

@@ -13,8 +13,11 @@
 # --- Ingesta: qué archivos se leen y cómo ------------------------------------
 ingesta:
   logs_path: "./data/logs"     # Carpeta con los logs de ejemplo
-  file_pattern: "*.log"        # Patrón glob de archivos a ingerir
-  encoding: "utf-8"            # Codificación de lectura
+  file_pattern: "*.log"        # Patrón glob simple (compat. Fase 1)
+  # Fase 3.5: corpus real en subcarpetas por app y con .gz rotados.
+  file_patterns: ["*.log"]     # Lista de patrones (p. ej. ["*.log", "*.gz"]); vacío -> usa file_pattern
+  recursive: false             # true -> explora subcarpetas (una por aplicación)
+  encoding: "utf-8"            # Codificación de lectura (.gz se descomprime al vuelo)
   source_type: "auto"         # auto | haproxy | iis (auto = detectar por archivo)
 
 # --- Parsing: cómo se interpreta cada línea ----------------------------------

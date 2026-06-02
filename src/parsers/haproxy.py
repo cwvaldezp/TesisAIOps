@@ -30,7 +30,14 @@ EFECTO DE PARÁMETROS
 REFERENCIA DEL FORMATO (campos, en orden):
     client_ip:port [accept_date] frontend backend/server Tq/Tw/Tc/Tr/Tt
     status bytes req_cookie res_cookie term_state actconn/feconn/beconn/srv/retries
-    srv_queue/backend_queue "HTTP request"
+    srv_queue/backend_queue [{captured_request_headers}] [{captured_response_headers}]
+    "HTTP request"
+
+    Nota (Fase 3.5): en HAProxy real es común tener "capture request header"
+    (p. ej. el Host), que inserta uno o dos bloques `{...}` entre las colas y la
+    petición: `... 0/0 {api-foo.example.com} "GET / HTTP/1.1"`. El patrón los
+    admite como opcionales (0, 1 o 2 bloques) para parsear logs reales sin perder
+    compatibilidad con líneas que no capturan cabeceras.
 """
 
 from __future__ import annotations
@@ -59,6 +66,7 @@ _HAPROXY_HTTP_RE = re.compile(
     r"(?P<term_state>\S+)\s+"                          # estado de terminación
     r"\d+/\d+/\d+/\d+/\d+\s+"                          # contadores de conexiones
     r"\d+/\d+\s+"                                      # colas srv/backend
+    r"(?:\{[^}]*\}\s+){0,2}"                           # cabeceras capturadas opcionales {host} (Fase 3.5)
     r'"(?P<request>[^"]*)"'                            # "GET /ruta HTTP/1.1"
 )
 

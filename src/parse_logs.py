@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from src.config import Config, load_config
+from src.ingest import discover_log_files, read_log_lines
 from src.parsers import STATUS_ERROR, STATUS_OK
 from src.parsers.haproxy import HAProxyParser
 from src.parsers.iis import IISParser
@@ -92,8 +93,8 @@ def build_parser(source: str, cfg: Config):
 
 def parse_file(path: Path, cfg: Config, forced_source: str | None) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """Parsea un único archivo de log y devuelve (eventos, estadísticas)."""
-    text = path.read_text(encoding=cfg.encoding)
-    lines = text.splitlines()
+    # Lectura tolerante a .gz (Fase 3.5): descomprime al vuelo si corresponde.
+    lines = read_log_lines(path, cfg.encoding)
 
     # Determina la fuente (forzada por CLI/config o autodetectada).
     if forced_source and forced_source != "auto":
@@ -157,11 +158,12 @@ def run(cfg: Config, forced_source: str | None = None, output_format: str | None
         print(f"[ERROR] No existe la carpeta de logs: {logs_dir}", file=sys.stderr)
         return 1
 
-    files = sorted(logs_dir.glob(cfg.file_pattern))
+    patterns = cfg.effective_patterns()
+    files = discover_log_files(logs_dir, patterns, recursive=cfg.recursive)
     if not files:
         print(
-            f"[ERROR] No se encontraron archivos que casen '{cfg.file_pattern}' "
-            f"en {logs_dir}",
+            f"[ERROR] No se encontraron archivos que casen {patterns} "
+            f"en {logs_dir} (recursive={cfg.recursive})",
             file=sys.stderr,
         )
         return 1
@@ -174,7 +176,8 @@ def run(cfg: Config, forced_source: str | None = None, output_format: str | None
 
     print(f"== TesisAIOps · Parser de logs (Fase 1) ==")
     print(f"Carpeta de logs : {logs_dir}")
-    print(f"Patrón          : {cfg.file_pattern}")
+    print(f"Patrón(es)      : {patterns}  (recursive={cfg.recursive})")
+    print(f"Archivos        : {len(files)}")
     print(f"Salida          : {processed_dir} ({fmt})")
     print("-" * 60)
 

@@ -76,8 +76,8 @@ flowchart LR
 
 | Paso | Acción | Componente | Entrada | Salida |
 |------|--------|-----------|---------|--------|
-| 1 | Listar archivos según `file_pattern` | Ingesta | `logs_path` | Lista de archivos |
-| 2 | Leer línea a línea con `encoding` | Ingesta | Archivo | Líneas crudas + nº de línea |
+| 1 | Listar archivos según `file_patterns` (`recursive` opc.) | Ingesta | `logs_path` | Lista de archivos (`.log`/`.gz`) |
+| 2 | Leer líneas con `encoding` (descomprime `.gz` al vuelo) | Ingesta | Archivo | Líneas crudas + nº de línea |
 | 3 | Detectar fuente (`source_type`) | Ingesta | Nombre/contenido | `haproxy` \| `iis` |
 | 4 | Parsear según formato | Parser HAProxy/IIS | Línea cruda | Campos extraídos |
 | 5 | Aplicar política ante error | Parser | Línea no parseable | Descartar/incluir/abortar |

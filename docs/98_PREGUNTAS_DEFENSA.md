@@ -57,6 +57,7 @@ objetivo, requisito y componente para trazabilidad de punta a punta.
 | P-25 | ¿Cómo se prueba el Embedder sin depender del modelo real? | ADR-012 / Fase 2C | Decidido |
 | P-26 | ¿Cómo se guardan los metadatos en Chroma y por qué upsert? | ADR-013 / Fase 2D | Decidido |
 | P-27 | ¿Cómo se convierte una consulta textual en evidencia recuperada sin usar todavía un LLM? | ADR-014 / Fase 3 | Decidido |
+| P-28 | ¿Cómo se validó el pipeline con logs reales y qué desajustes revelaron frente a los sintéticos? | ADR-015 / Fase 3.5 | Decidido |
 
 ---
 
@@ -1155,6 +1156,72 @@ embeddings (no se mide con un benchmark formal en el MVP, solo cualitativamente)
 Materializa la **primera mitad del RAG** (recuperar evidencia citable, RNF-05)
 de forma **transparente y testeable**, dejando claro qué hace el sistema **antes**
 de introducir un LLM. Vínculo R17: OE3 · RF-07/RF-08 · Retriever · ADR-014 · P-27.
+
+---
+
+## P-28
+
+### Pregunta
+¿Cómo se validó el pipeline con **logs reales** y qué desajustes revelaron frente
+a los logs sintéticos?
+
+### Respuesta corta
+Se ejecutó el pipeline completo (parse→chunk→embed→índice, **sin LLM**) sobre el
+corpus real del balanceador HAProxy. La validación destapó **tres desajustes** que
+los samples sintéticos ocultaban: los logs venían **comprimidos** (`.gz`) y en
+**subcarpetas por app**, el formato real traía **cabeceras capturadas** `{host}`
+que rompían el parser, y un archivo "iis" era en realidad **HAProxy**. Se corrigió
+todo (ADR-015) y se midió eventos/chunks/embeddings/tiempo de indexación.
+
+### Respuesta técnica
+El corpus real (logs de HAProxy de la USFQ) tiene 269 archivos. Al intentarlo
+afloraron: (1) **compresión y estructura** — un `.log` vigente por app más decenas
+de `.log-YYYYMMDD.gz` rotados, organizados en una subcarpeta por aplicación; (2)
+**cabeceras capturadas** — el `capture request header` de HAProxy inserta uno o
+dos bloques `{...}` (p. ej. `{api-account-devl.usfq.edu.ec}`) entre las colas y la
+petición, y el regex del sample sintético no los preveía, de modo que **el 100 %
+de las líneas reales caía como no parseable** (0 eventos con `on_parse_error=skip`);
+(3) **nombre engañoso** — `app-portal-sitios-iis-devl` parecía IIS por el nombre,
+pero su contenido es HAProxy (el "iis" es el *backend* Windows). La respuesta
+(ADR-015): lectura `.gz` transparente con `gzip` (stdlib) y descubrimiento
+recursivo multi-patrón (`src/ingest.py`); regex HAProxy tolerante a 0–2 bloques
+`{...}` (retrocompatible); y tratar el corpus como HAProxy. Un arnés
+(`src/validate_corpus.py`) mide cada etapa. Resultados en
+`docs/91_VALIDACION_CORPUS.md`.
+
+### Alternativas consideradas
+- Descomprimir los `.gz` a disco en un paso previo y dejar el pipeline igual.
+- Reescribir el parser con una gramática completa del log de HAProxy.
+- Confiar en los samples sintéticos y posponer el corpus real.
+
+### Por qué no se eligieron
+- *Descomprimir a disco:* duplica datos y añade un paso manual frágil; `gzip` al
+  vuelo es trivial (Regla 10).
+- *Gramática completa:* excesivo para el MVP cuando basta admitir un bloque
+  opcional en el patrón.
+- *Posponer:* la tesis exige evidencia de que el sistema funciona con datos
+  **reales**, no solo de juguete; validar temprano reduce riesgo.
+
+### Qué pasa si se cambia un parámetro
+Incluir `*.gz` en `file_patterns` (o activar `recursive`) multiplica el volumen
+ingerido y, por tanto, eventos/chunks/embeddings y el **tiempo de indexación**;
+`chunk_size`/`overlap` cambian cuántos chunks se generan por evento.
+
+### Cómo se evalúa
+`tests/test_ingest.py` (lectura `.gz`/plano, descubrimiento recursivo sin
+duplicados) y `tests/test_haproxy_parser.py` (líneas reales con 1 y 2 bloques de
+cabeceras capturadas). La medición end-to-end (eventos, chunks, embeddings,
+tiempos) queda registrada y es reproducible con `python -m src.validate_corpus`.
+
+### Limitaciones
+El corpus actual es **HAProxy-only**: no hay un log **W3C-IIS real**, así que la
+conformidad IIS sigue validada solo con el sample sintético. El corte por fecha
+del rotado `.gz` y un benchmark de relevancia quedan como mejoras futuras.
+
+### Relación con la tesis
+Demuestra honestidad y robustez de ingeniería: el MVP se confronta con **datos
+reales**, se documentan los desajustes y se corrigen de forma trazable (ADR-015).
+Vínculo R17: OE1 · RF-01 · Ingesta · ADR-015 · P-28.
 
 ---
 

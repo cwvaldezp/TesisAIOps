@@ -28,9 +28,17 @@ opciones, y efecto de cambiarlo** (incluido si obliga a reindexar).
 | Parámetro | Qué controla | Default (prov.) | Opciones/Rango | Reindexa | Sensibilidad |
 |---|---|---|---|---|---|
 | `logs_path` | Carpeta/ruta de los logs de ejemplo | `./data/logs` | ruta válida | Sí | Alta |
-| `file_pattern` | Patrón de archivos a ingerir | `*.log` | glob | Sí | Media |
-| `encoding` | Codificación de lectura | `utf-8` | utf-8, latin-1… | Sí | Media |
+| `file_pattern` | Patrón simple de archivos (compat. Fase 1) | `*.log` | glob | Sí | Media |
+| `file_patterns` | Lista de patrones glob (Fase 3.5); vacío → usa `file_pattern` | `["*.log"]` | lista de globs (p. ej. `["*.log","*.gz"]`) | Sí | Media |
+| `recursive` | Explorar subcarpetas por aplicación (Fase 3.5) | `false` | true/false | Sí | Media |
+| `encoding` | Codificación de lectura (`.gz` se descomprime al vuelo) | `utf-8` | utf-8, latin-1… | Sí | Media |
 | `source_type` | Forzar tipo de fuente o autodetectar | `auto` | auto/haproxy/iis | Sí | Media |
+
+> **Fase 3.5 (ADR-015):** el corpus real viene comprimido (`.gz`) y en una
+> subcarpeta por aplicación. `file_patterns` permite incluir `*.gz` y `recursive`
+> recorre las subcarpetas; la lectura `.gz` es **transparente** (gzip, stdlib). El
+> nombre con "iis" de un archivo **no** garantiza formato W3C: el corpus real es
+> HAProxy (usar `source_type`/`--source haproxy`).
 
 ## 3. Parsing
 
