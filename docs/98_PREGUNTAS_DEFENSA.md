@@ -61,6 +61,8 @@ objetivo, requisito y componente para trazabilidad de punta a punta.
 | P-29 | ¿Por qué un LLM **local** (Ollama + Qwen2.5) y no una API en la nube (OpenAI) para generar respuestas? | ADR-016 / Fase 4A | Decidido |
 | P-30 | ¿Cómo se garantiza que las citas del LLM son **reales** y no alucinadas? | ADR-017 / Fase 4B | Decidido (diseño) |
 | P-31 | ¿Cómo se demostró que el Retriever realmente recupera evidencia relevante? | ADR-014 / Fase 3 (validación) | Decidido (validado) |
+| P-32 | ¿Cómo se evaluó **objetivamente** la calidad del Retriever? | ADR-014 / Fase 3 (evaluación) | Decidido (evaluado) |
+| P-33 | ¿Por qué fallan ciertas consultas y cómo se priorizan las mejoras del Retriever? | ADR-014 / Fase 3 (análisis de fallos) | Decidido (analizado) |
 
 ---
 
@@ -1413,6 +1415,135 @@ Aporta **evidencia experimental** de recuperación semántica, búsqueda vectori
 **trazabilidad** sobre datos reales: la base empírica sobre la que se justificará la
 generación con citas (Fase 4B). Vínculo R17: OE3 · RF-08 · Retriever · ADR-014 ·
 P-31. Documento: `docs/93_VALIDACION_RETRIEVER.md`.
+
+---
+
+## P-32
+
+### Pregunta
+¿Cómo se evaluó **objetivamente** la calidad del Retriever (más allá de una sola
+consulta de demostración)?
+
+### Respuesta corta
+Con una **evaluación formal de 12 consultas operativas** sobre el corpus real,
+juzgando la relevancia de cada resultado **contra el histograma real de códigos de
+estado** de los chunks recuperados (no por impresión), y calculando **Precisión@1
+y Precisión@3**. Resultados, amenazas a la validez y limitaciones en
+`docs/94_EVALUACION_RECUPERACION.md`.
+
+### Respuesta técnica
+Se definieron 12 consultas en español sobre fenómenos operativos (404, 503, 301,
+CORS/204, backend caído, timeout, health, errores 5xx, APIs, IIS/HAProxy, auth,
+POST) y se ejecutaron contra la colección `tesisaiops_validacion` (1 706 chunks).
+Para cada uno de los **top-3** se leyó el **histograma real de status/método/ruta**
+de los eventos del chunk y se etiquetó con una **rúbrica explícita**: **Relevante**
+(el fenómeno domina), **Parcialmente relevante** (aparece minoritario) o **No
+relevante** (ausente). Métricas (R=1, P=0.5): **Precisión@1 = 0.42 ponderada**
+(0.67 contando parciales; 0.17 estricta solo-R), **Precisión@3 = 0.40 ponderada**,
+**Éxito@3 = 0.67**. El Retriever acierta de forma fiable en fenómenos **frecuentes
+y distintivos** (301, 5xx, 404) y falla de forma **explicable** cuando el fenómeno
+**no está en el corpus** (timeout, auth) o es **semánticamente difuso** (CORS,
+POST).
+
+### Alternativas consideradas
+- Reportar solo una consulta de demostración (como en `93`).
+- Métricas internas (distancias) sin juicio de relevancia.
+- *Gold set* grande con recall, MAP, nDCG e inter-anotador.
+
+### Por qué no se eligieron
+- *Una consulta:* anecdótico, no mide calidad agregada.
+- *Solo distancias:* un score no prueba pertinencia.
+- *Gold set grande:* deseable pero excede el MVP; se hizo una evaluación
+  **intermedia rigurosa** (12 consultas, rúbrica anclada en datos) y se dejó el
+  *gold set* exhaustivo como trabajo futuro.
+
+### Qué pasa si se cambia un parámetro
+↑`top_k` mejora Éxito@k (más oportunidades) pero baja la precisión (más ruido);
+recuperación **híbrida**/re-ranking subiría la precisión en consultas difusas
+(p. ej. Q04 CORS, donde la evidencia existía pero no se recuperó); cambiar el
+modelo de embeddings obliga a reindexar y reevaluar.
+
+### Cómo se evalúa
+Reproducible: 12 consultas con la librería del proyecto sobre
+`tesisaiops_validacion`; relevancia contra el **histograma de códigos reales** de
+cada chunk; Precisión@1/@3 con rúbrica documentada.
+
+### Limitaciones
+**Anotador único** (sin κ inter-evaluador); **n = 12** (sin intervalos de
+confianza); **sin recall** (solo precisión@k); corpus **HAProxy-only** que penaliza
+fenómenos ausentes; scores absolutos bajos por recuperación asimétrica.
+
+### Relación con la tesis
+Aporta **madurez metodológica**: mide un componente de IA con consultas, rúbrica y
+métricas estándar, y **documenta sus límites con honestidad**. Justifica
+empíricamente las decisiones siguientes (híbrido futuro; anclaje estricto de citas
+en Fase 4B, ADR-017). Vínculo R17: OE3 · RF-08 · Retriever · ADR-014 · P-32.
+Documento: `docs/94_EVALUACION_RECUPERACION.md`.
+
+---
+
+## P-33
+
+### Pregunta
+¿Por qué **fallan** ciertas consultas del Retriever y cómo se **priorizan** las
+mejoras para corregirlas?
+
+### Respuesta corta
+Porque los fallos tienen **dos causas distintas**: o el fenómeno **no está en el
+corpus** (timeout, auth, health) o **está pero el modelo no lo recupera** (CORS,
+API). Se diagnosticó cada fallo **con datos del corpus** y se priorizó: lo del lado
+modelo se ataca con **recuperación híbrida**; lo del lado corpus, **solo
+enriqueciendo los datos**. Detalle en `95_ANALISIS_FALLOS_RETRIEVER.md`.
+
+### Respuesta técnica
+A partir de la evaluación (`94`), se hizo un **análisis de causa raíz** (`95`)
+midiendo la **presencia real** de cada fenómeno: timeout `504` = **0** eventos, auth
+`401/403` = **13**, health ≈ 12–50; mientras que CORS (`OPTIONS` 4 550, `204` 4 355)
+y API (`/api` 9 893) **sí abundan** pero **no se recuperaron**. Esto separa los
+fallos en: (a) **ausencia/escasez de evidencia** —irresoluble por técnica de
+recuperación— y (b) **limitación del modelo** (MiniLM) —brecha semántica entre la
+consulta en español y el texto estructurado del log—. Cuantitativamente: de los
+**fallos duros** (top-1 no relevante: Q04/Q06/Q07/Q11), **75 % son ausencia** y
+**25 % modelo**; del conjunto problemático ampliado, **≈50 %/50 %**. La priorización
+se deriva del diagnóstico: **híbrido (BM25 + densa)** tiene el mayor ROI (recupera
+la evidencia existente que MiniLM no afloró), los **filtros de metadatos** (ADR-014)
+resuelven casos de intención (severidad/método), el **re-ranking** complementa pero
+**no rescata** lo que no entró al pool, y el **enriquecimiento del corpus** es la
+única vía para los fenómenos ausentes.
+
+### Alternativas consideradas
+- Atribuir todos los fallos al modelo y "cambiar de embeddings".
+- Atribuir todos los fallos al corpus y descartar la técnica.
+- Saltar el análisis e ir directo a re-ranking (lo más "de moda").
+
+### Por qué no se eligieron
+- *Todo al modelo:* falso; 504/auth/health **no existen** en el corpus.
+- *Todo al corpus:* falso; CORS/API **sí existen** y no se recuperaron.
+- *Re-ranking directo:* **no resolvería** Q04/Q09, cuyos documentos relevantes
+  **no entran** al top-k (el re-ranking solo reordena lo ya recuperado).
+
+### Qué pasa si se cambia un parámetro
+Ampliar `top_k`/top-N antes de re-rankear mete más candidatos (sube recall, baja
+precisión); activar **híbrido** subiría la precisión en los casos de vocabulario;
+**filtros** (`severity`,`method`,`source_file`) acotan la intención. Ninguna palanca
+crea evidencia ausente.
+
+### Cómo se evalúa
+Reproducible: inventario de fenómenos medido sobre el corpus (27 280 eventos) +
+resultados de `94`; cada fallo se clasifica por **presencia de datos** y se predice
+el efecto de híbrido/re-ranking. Métrica de validación futura: repetir Precisión@k
+tras introducir el híbrido.
+
+### Limitaciones
+Diagnóstico sobre **n = 12** consultas y un corpus **HAProxy-only**; la frontera
+"ausencia vs escasez" tiene casos límite (p. ej. health ~12–50); las predicciones de
+mejora (híbrido/re-ranking) son **hipótesis fundamentadas**, aún no medidas.
+
+### Relación con la tesis
+Eleva el trabajo de "medir que falla" a **entender por qué falla y qué hacer**:
+distingue causas con datos y **prioriza** la hoja de ruta de forma defendible
+(híbrido > re-ranking; corpus para fenómenos ausentes). Vínculo R17: OE3 · RF-08 ·
+Retriever · ADR-014 · P-33. Documento: `95_ANALISIS_FALLOS_RETRIEVER.md`.
 
 ---
 

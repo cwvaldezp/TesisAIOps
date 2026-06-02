@@ -82,9 +82,9 @@
 > de guardar el **texto del chunk como `document` de Chroma**. Sin decisiones de
 > ADR pendientes; su **implementación** es la Fase 4B (aún no iniciada).
 
-## Preguntas de defensa (31)
+## Preguntas de defensa (33)
 
-`P-01 … P-31` en [`98_PREGUNTAS_DEFENSA.md`](98_PREGUNTAS_DEFENSA.md), en formato
+`P-01 … P-33` en [`98_PREGUNTAS_DEFENSA.md`](98_PREGUNTAS_DEFENSA.md), en formato
 tribunal (7 facetas a partir de R16). Cobertura por tema:
 
 | Rango | Tema |
@@ -104,6 +104,8 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 | P-29 | LLM **local** (Ollama + Qwen2.5) vs. API en la nube (privacidad/coste/repro) |
 | P-30 | Citas **reales** y no alucinadas: tokens `[E#]` deterministas + validación |
 | P-31 | Validación experimental del Retriever (recupera evidencia real relevante) |
+| P-32 | Evaluación objetiva del Retriever (12 consultas, Precisión@1/@3) |
+| P-33 | Análisis de fallos del Retriever: causa raíz y priorización de mejoras |
 
 ## Métricas actuales
 
@@ -113,14 +115,16 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 | Archivos de prueba | 13 (`tests/test_*.py`) |
 | Módulos Python (`src/`) | 18 (incluye `src/ingest.py`, `src/validate_corpus.py`) |
 | Scripts de ejemplo | 1 (`examples/demo_haproxy_parser.py`) |
-| Documentos (`docs/`) | 14 `.md` + 4 diagramas `.mmd` |
+| Documentos (`docs/`) | 16 `.md` + 4 diagramas `.mmd` |
 | ADRs | 17 (todos aceptados/implementados) |
-| Preguntas de defensa | 31 |
+| Preguntas de defensa | 33 |
 | Requisitos funcionales cumplidos | RF-01…RF-08 (8 / 12) |
 | Commits | 8 |
 | Dependencias externas | PyYAML, pytest, sentence-transformers, chromadb. **Prevista Fase 4B:** Ollama (runtime local, ADR-016) — aún **no instalado** |
 | Validación corpus real | 27 280 eventos · 1 706 chunks · indexación 2,2 s (ver `91_VALIDACION_CORPUS.md`) |
 | Validación Retriever | consulta real "errores 404…" → top-5 coherente, verificado vs. log real (ver `93_VALIDACION_RETRIEVER.md`) |
+| Evaluación Retriever | 12 consultas · Precisión@1=0.42 (0.67 c/parciales) · Precisión@3=0.40 · Éxito@3=0.67 (ver `94_EVALUACION_RECUPERACION.md`) |
+| Análisis de fallos | causa raíz: fallos duros 75 % ausencia / 25 % modelo; prioriza híbrido > re-ranking (ver `95_ANALISIS_FALLOS_RETRIEVER.md`) |
 
 **Cobertura de requisitos funcionales:**
 
