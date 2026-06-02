@@ -58,6 +58,9 @@ objetivo, requisito y componente para trazabilidad de punta a punta.
 | P-26 | ¿Cómo se guardan los metadatos en Chroma y por qué upsert? | ADR-013 / Fase 2D | Decidido |
 | P-27 | ¿Cómo se convierte una consulta textual en evidencia recuperada sin usar todavía un LLM? | ADR-014 / Fase 3 | Decidido |
 | P-28 | ¿Cómo se validó el pipeline con logs reales y qué desajustes revelaron frente a los sintéticos? | ADR-015 / Fase 3.5 | Decidido |
+| P-29 | ¿Por qué un LLM **local** (Ollama + Qwen2.5) y no una API en la nube (OpenAI) para generar respuestas? | ADR-016 / Fase 4A | Decidido |
+| P-30 | ¿Cómo se garantiza que las citas del LLM son **reales** y no alucinadas? | ADR-017 / Fase 4B | Decidido (diseño) |
+| P-31 | ¿Cómo se demostró que el Retriever realmente recupera evidencia relevante? | ADR-014 / Fase 3 (validación) | Decidido (validado) |
 
 ---
 
@@ -1222,6 +1225,194 @@ del rotado `.gz` y un benchmark de relevancia quedan como mejoras futuras.
 Demuestra honestidad y robustez de ingeniería: el MVP se confronta con **datos
 reales**, se documentan los desajustes y se corrigen de forma trazable (ADR-015).
 Vínculo R17: OE1 · RF-01 · Ingesta · ADR-015 · P-28.
+
+---
+
+## P-29
+
+### Pregunta
+¿Por qué se eligió un LLM **local** (Ollama + Qwen2.5 7B) y no una **API en la
+nube** como OpenAI para generar las respuestas?
+
+### Respuesta corta
+Porque los logs contienen **datos sensibles** (IPs, hostnames y endpoints
+internos) y enviarlos a un tercero contradiría la privacidad por diseño del MVP.
+Un modelo local da **privacidad, coste cero y reproducibilidad**; y como el
+retriever ya hizo el trabajo difícil (encontrar la evidencia), a un 7B local le
+basta para **redactar sobre lo recuperado**.
+
+### Respuesta técnica
+La decisión (**ADR-016**) compara OpenAI GPT, Ollama + Llama 3 y Ollama + Qwen2.5
+en seis dimensiones (técnica, costo, riesgos, despliegue, privacidad, defensa).
+El factor decisivo es la **coherencia**: el proyecto ya procesa **embeddings en
+local por privacidad** (ADR-012) y es **solo-lectura** (ADR-005); en Fase 3.5 se
+excluyó el corpus real del repo justamente por su sensibilidad. Mandar fragmentos
+de log a una API implicaría **egress** de IPs/hosts internos. Se elige **Qwen2.5
+7B** por su **español** fuerte, su adherencia a **formato** (clave para forzar
+**citas** y reducir alucinación, RNF-05) y su **licencia Apache-2.0**; **Llama 3.1
+8B** queda como alternativa documentada. La capa LLM se diseña **agnóstica del
+proveedor** contra el endpoint **OpenAI-compatible** de Ollama (`localhost:11434`),
+de modo que cambiar de modelo sea configuración, no reescritura.
+
+### Alternativas consideradas
+- **OpenAI GPT (API):** máxima calidad y contexto amplio.
+- **Ollama + Llama 3.1 8B:** local, baseline muy reconocible.
+- Fine-tuning de un modelo propio; o no usar LLM (solo recuperación).
+
+### Por qué no se eligieron
+- *OpenAI:* **fuga de datos** sensibles a un tercero, **coste recurrente** atado a
+  clave/facturación y **reproducibilidad frágil** (las versiones cambian o se
+  retiran); choca con ADR-005/ADR-012.
+- *Llama 3.1:* válida y equivalente en privacidad/coste, pero su **licencia** tiene
+  más cláusulas que Apache-2.0 y su **español** es algo más flojo → queda como
+  *fallback*.
+- *Fine-tuning:* excede el MVP (Regla 10). *Sin LLM:* no cumple RF-10/RF-11.
+
+### Qué pasa si se cambia un parámetro
+Cambiar `llm_model` (p. ej. a Llama 3.1 o a un Qwen mayor) altera
+**calidad/latencia** y obliga a **revalidar el prompt y la fidelidad de las
+citas**, pero **no** a reindexar (los embeddings de ADR-012 no cambian). En **CPU**
+un 7B genera pocos tokens/s: la latencia sube con la longitud de la respuesta y con
+`top_k` (más contexto recuperado → más tokens de entrada).
+
+### Cómo se evalúa
+Sobre un set pequeño de consultas de incidente con respuesta conocida: (a)
+**fidelidad de las citas** (cada afirmación apunta a líneas realmente recuperadas),
+(b) ausencia de alucinación, (c) latencia local aceptable para la demo.
+
+### Limitaciones
+Techo de calidad de un modelo local 7B frente a uno de frontera; latencia en CPU;
+la garantía **anti-alucinación** no la da el modelo por sí solo: se diseñará en
+Fase 4B (prompt estricto + post-proceso que verifica que las citas existen).
+
+### Relación con la tesis
+Cierra el ciclo RAG de forma **coherente y defendible**: privacidad por diseño,
+**coste cero** y **reproducibilidad** (el tribunal ejecuta todo sin clave ni gasto),
+alineado con el resto del MVP. Vínculo R17: OE4 · RF-09/RF-10/RF-11 · Capa LLM ·
+ADR-016 · P-29.
+
+---
+
+## P-30
+
+### Pregunta
+¿Cómo se garantiza que las **citas** que acompañan a la respuesta del LLM son
+**reales** (apuntan a líneas de log existentes) y no **alucinadas**?
+
+### Respuesta corta
+Porque **el LLM nunca escribe las citas**. El modelo solo emite tokens `[E#]` que
+referencian la evidencia recuperada; **el sistema** traduce cada `[E#]` a una cita
+real (`archivo:Lx-Ly · ts · severidades`) usando los **metadatos de confianza** del
+retriever. Una cita fabricada es **imposible por construcción**, y una validación
+programática descarta cualquier `[E#]` inexistente.
+
+### Respuesta técnica
+El diseño (**ADR-017**, detalle en `docs/92_DISENO_CAPA_LLM.md`) separa dos
+responsabilidades: (1) **qué dice** el modelo —prosa con marcadores `[E#]`— y (2)
+**a qué apunta** cada cita —lo decide el sistema, no el modelo—. La evidencia del
+retriever (ADR-014) se etiqueta `[E1..Ek]`; el system prompt prohíbe escribir
+archivos o números de línea y obliga a citar solo esos identificadores. Tras
+generar, un **validador** comprueba: que todo `[E#]` usado exista, que haya ≥1 cita
+si se afirmó algo, y que la abstención ("no hay evidencia suficiente…") sea
+coherente. Si falla, hay **un reintento más estricto** y, si persiste,
+**degradación elegante** (se devuelve la evidencia sin redacción o se marca "no
+verificada"). Solo al validar se **expanden** los `[E#]` a la cita real desde
+`source_file`/`line_start`/`line_end`/`ts`/`severities`. Defensa en capas:
+grounding por RAG, citas deterministas, anclaje obligatorio, abstención,
+validación y temperatura baja.
+
+### Alternativas consideradas
+- Dejar que el LLM escriba las citas (`archivo:línea`) libremente.
+- Forzar salida **JSON estricta** validada por esquema.
+- Segunda pasada de verificación con otro LLM (cross-check).
+
+### Por qué no se eligieron
+- *Citas libres:* es la **fuente principal** de alucinación de citas (números de
+  línea inventados); justo lo que el diseño elimina.
+- *JSON estricto:* frágil en un 7B local (JSON inválido frecuente); se prefiere
+  `[E#]` + validación tolerante (Regla 10).
+- *Segundo LLM:* añade coste/latencia y otro punto de fallo; mejora futura.
+
+### Qué pasa si se cambia un parámetro
+↑`temperature` → más afirmaciones no ancladas (más trabajo para el validador);
+↑`top_k` → más evidencia disponible para citar, pero más tokens y latencia (CPU).
+Cambiar el modelo (ADR-016) obliga a **revalidar** la fidelidad de las citas.
+
+### Cómo se evalúa
+Métricas de `docs/92`: **validez de citas** (meta 100 %), **anclaje** de
+afirmaciones, **abstención correcta** y **tasa de alucinación** (≈0) sobre un set
+con respuesta conocida; tests con **cliente LLM falso** (sin Ollama).
+
+### Limitaciones
+La cita apunta al **rango del chunk** (≈20 eventos, ADR-011), no a la línea exacta;
+la verificación es **estructural** (existencia/anclaje), no semántica profunda; un
+7B puede abstenerse de más o de menos (se calibra con el set de evaluación).
+
+### Relación con la tesis
+Materializa RNF-05 ("citas verificables, sin alucinación") como **control
+ejecutable**: la **auditabilidad** de las respuestas es un aporte diferencial del
+MVP. Vínculo R17: OE4 · RF-09/RF-10/RF-11 · Capa LLM · ADR-017 · P-30.
+
+---
+
+## P-31
+
+### Pregunta
+¿Cómo se demostró que el Retriever **realmente** recupera evidencia **relevante**
+(y no solo que "devuelve algo")?
+
+### Respuesta corta
+Con un **experimento reproducible sobre el corpus real**: una consulta en lenguaje
+natural (`"errores 404 pagina no encontrada"`) recuperó top-5 chunks cuyo contenido
+**real** —leído de las líneas originales del log— está **densamente poblado de
+respuestas 404**. La relevancia se **verificó contra la evidencia cruda**, no por
+confianza en el modelo. Registrado en `docs/93_VALIDACION_RETRIEVER.md`.
+
+### Respuesta técnica
+Sobre la colección Chroma `tesisaiops_validacion` (1 706 chunks del corpus real,
+ADR-013), se embebió la consulta con el mismo modelo local (MiniLM 384-d, ADR-012)
+y se hizo búsqueda **top-k coseno** (ADR-014). Resultado: 5 chunks ordenados por
+score; el **#2** tenía `warning:20` (los 20 eventos del chunk son 4xx) y al leer
+sus líneas reales (`api-account-devl…log:L11887–L11906`) **todas eran 404**. La
+severidad `warning` se deriva del status (ADR-010), funcionando como
+**confirmación independiente** de la coherencia. La validación es **de extremo a
+extremo**: `log → evento → chunk → embedding → Chroma → retriever → evidencia`, con
+cada resultado **citable** (`archivo:rango`) y verificable contra el log original.
+
+### Alternativas consideradas
+- Confiar en que "el sistema responde" sin inspeccionar la evidencia.
+- Medir solo métricas internas (distancias) sin contrastar contenido real.
+- Evaluación con un *gold set* grande y precisión@k formal.
+
+### Por qué no se eligieron
+- *Confiar sin inspeccionar:* no es defendible; podría recuperar ruido.
+- *Solo distancias:* un score no prueba **pertinencia**; hay que mirar el log real.
+- *Gold set grande:* deseable pero excede el MVP; se hizo una validación
+  **cualitativa fuerte** (evidencia real verificada) como primer hito, dejando
+  precisión@k como trabajo futuro.
+
+### Qué pasa si se cambia un parámetro
+↑`top_k` muestra más evidencia (más recall, más ruido en la cola); `score_threshold`
+filtraría resultados poco similares pero, por los scores absolutos modestos
+(recuperación asimétrica NL↔log), debe calibrarse con datos; cambiar el modelo de
+embeddings obliga a reindexar y revalidar.
+
+### Cómo se evalúa
+Inspección de los **top-k** y **contraste contra las líneas reales** del log en el
+rango recuperado (coherencia), más la severidad derivada como verificación cruzada.
+Reproducible con la librería del proyecto sobre `tesisaiops_validacion`.
+
+### Limitaciones
+Scores absolutos bajos (~0.29) por recuperación asimétrica; precisión imperfecta en
+la cola (#4–#5 sin 404); cita a **rango de chunk**, no a línea exacta; validación
+con **una** consulta sobre corpus **HAProxy-only**. Mejoras: híbrido/re-ranking
+(P-22) y un *gold set*.
+
+### Relación con la tesis
+Aporta **evidencia experimental** de recuperación semántica, búsqueda vectorial y
+**trazabilidad** sobre datos reales: la base empírica sobre la que se justificará la
+generación con citas (Fase 4B). Vínculo R17: OE3 · RF-08 · Retriever · ADR-014 ·
+P-31. Documento: `docs/93_VALIDACION_RETRIEVER.md`.
 
 ---
 

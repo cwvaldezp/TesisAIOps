@@ -46,6 +46,8 @@ Estados: `Propuesta` → `Aceptada`/`Rechazada`. Una decisión puede ser
 | ADR-013 | Vector store local: Chroma (persistente) | Aceptada (diseño) | 2026-06-01 |
 | ADR-014 | Estrategia de recuperación (top-k denso + filtros de metadatos) | Aceptada · **implementado (Fase 3)** | 2026-06-01 |
 | ADR-015 | Soporte de corpus real: lectura `.gz`, cabeceras capturadas HAProxy, ingesta recursiva | Aceptada · **implementado (Fase 3.5)** | 2026-06-02 |
+| ADR-016 | Selección de modelo LLM para generación de respuestas | **Aceptada (diseño)** · Ollama + Qwen2.5 7B (local) | 2026-06-02 |
+| ADR-017 | Diseño de la capa LLM: prompt, anti-alucinación, formato de citas y validación | **Aceptada (diseño)** · texto del chunk como `document` de Chroma | 2026-06-02 |
 
 ---
 
@@ -505,11 +507,227 @@ Estados: `Propuesta` → `Aceptada`/`Rechazada`. Una decisión puede ser
 
 ---
 
+### ADR-016 · Selección de modelo LLM para generación de respuestas
+- **Fecha:** 2026-06-02 · **Estado:** **Aceptada (diseño)** — aprobada por el autor
+  el 2026-06-02: **Ollama + Qwen2.5 7B (local)**. Fase 4A (diseño, **sin código** y
+  **sin instalar Ollama** todavía; la implementación es Fase 4B).
+- **Contexto:** El pipeline ya recupera evidencia citable (Fase 3, ADR-014). La
+  Fase 4 debe **generar la respuesta en lenguaje natural** a partir de esa
+  evidencia (RF-09 ensamblar contexto, RF-10 generar con LLM, RF-11 citar líneas),
+  **sin alucinar** (RNF-05). Falta decidir **qué LLM** se usa. La decisión es
+  delicada porque los logs contienen **datos sensibles** (IPs `172.21.x.x`,
+  hostnames y endpoints internos) — de hecho, en Fase 3.5 se excluyó el corpus
+  real del repo por eso mismo — y el proyecto ya optó por **procesamiento local**
+  en embeddings (ADR-012) y por un MVP **solo-lectura/sin exponer infraestructura**
+  (ADR-005). Se comparan tres opciones: **OpenAI GPT** (API en la nube),
+  **Ollama + Llama 3** (local) y **Ollama + Qwen2.5** (local).
+
+#### Opciones evaluadas
+
+- **A. OpenAI GPT (API):** modelos frontera (p. ej. GPT-4o / GPT-4o-mini) vía API
+  HTTP con API key. Máxima calidad y contexto amplio; el dato sale del equipo.
+- **B. Ollama + Llama 3 (local):** runtime **Ollama** sirviendo un modelo abierto
+  de Meta (p. ej. **Llama 3.1 8B**). Todo en local; el modelo más reconocido.
+- **C. Ollama + Qwen2.5 (local):** mismo runtime con un modelo de Alibaba (p. ej.
+  **Qwen2.5 7B/14B**), fuerte en **multilingüe (español)** y en seguir formato.
+
+#### 1) Análisis técnico
+
+| Criterio | OpenAI GPT | Ollama + Llama 3.1 8B | Ollama + Qwen2.5 7B/14B |
+|---|---|---|---|
+| Calidad de respuesta | **Muy alta** (frontera) | Buena (sólida 8B) | Buena–muy buena (7B/14B) |
+| Español | Excelente | Correcto | **Muy bueno** (multilingüe fuerte) |
+| Ventana de contexto | Muy amplia (128k+) | 128k (3.1) | 32k base, ampliable | 
+| Seguir formato/citas | Excelente | Bueno (requiere prompt firme) | **Muy bueno** (estructura/JSON) |
+| Control local / offline | No | **Sí** | **Sí** |
+| Requisitos de hardware | Ninguno (nube) | ~5 GB (Q4) CPU/GPU modesta | ~5 GB (7B) / ~9 GB (14B) |
+| Licencia | Propietaria | Llama Community (con cláusulas) | **Apache-2.0** (7B/14B) |
+
+#### 2) Costos
+
+| | OpenAI GPT | Ollama + Llama 3 | Ollama + Qwen2.5 |
+|---|---|---|---|
+| Coste marginal por consulta | Por tokens (recurrente)¹ | **Cero** | **Cero** |
+| Coste inicial | API key + facturación | Descarga del modelo (~1 vez) | Descarga del modelo (~1 vez) |
+| Dependencia económica | Sí (proveedor) | No | No |
+
+> ¹ Orden de magnitud (sujeto a cambios del proveedor): un modelo "mini" ronda
+> céntimos por millón de tokens de entrada; con top-k≈5 chunks por consulta el
+> gasto por pregunta es bajo, pero **recurrente** y atado a facturación/clave.
+> Local = **0** coste marginal (solo hardware/electricidad ya disponibles).
+
+#### 3) Riesgos
+
+| Riesgo | OpenAI GPT | Ollama + Llama 3 / Qwen2.5 |
+|---|---|---|
+| **Fuga de datos** (logs a un tercero) | **Alto** (egress de IPs/hosts internos) | Nulo (no salen del equipo) |
+| Disponibilidad / red | Requiere Internet; rate limits | Offline; sin dependencia de red |
+| Cambios/retiro de modelo | Versiones cambian o se retiran → reproducibilidad frágil | Modelo **fijado** localmente (reproducible) |
+| Coste imprevisto | Posible (uso) | No |
+| Calidad insuficiente | Bajo (frontera) | Medio (techo de un 7–14B) |
+| Mantenimiento de runtime | Ninguno | Gestionar Ollama (bajo) |
+
+#### 4) Facilidad de despliegue
+
+| | OpenAI GPT | Ollama + Llama 3 / Qwen2.5 |
+|---|---|---|
+| Puesta en marcha | Llamar API + key (trivial) | Instalar Ollama (binario único, Windows ok) + `ollama pull <modelo>` |
+| Integración | SDK/HTTP | **API HTTP local OpenAI-compatible** (`:11434`) → cliente intercambiable |
+| Offline / aula | No | **Sí** (demo sin red) |
+| Reproducible por el jurado | Necesita clave/facturación | **Sí**, sin claves |
+
+#### 5) Privacidad
+
+- **OpenAI:** los fragmentos de log (con IPs, hostnames y rutas **internas**) se
+  envían a un tercero. Aun con políticas de no-entrenamiento, el **egress** de
+  datos operativos choca de frente con el espíritu de **ADR-005** y con la
+  decisión de embeddings locales por privacidad (**ADR-012**), y con el manejo de
+  sensibilidad reforzado en Fase 3.5.
+- **Local (Ollama, Llama 3 / Qwen2.5):** **ningún dato sale del equipo**.
+  Privacidad por diseño, coherente con todo el MVP.
+
+#### 6) Impacto en la defensa de tesis
+
+- **Local refuerza la narrativa**: privacidad por diseño + coste cero +
+  **reproducibilidad** (el tribunal puede ejecutar el sistema completo sin clave
+  ni gasto) + **coherencia** con ADR-005/ADR-012. Es un argumento fuerte y
+  consistente para un asistente de **logs operativos**.
+- **OpenAI** es fácil de **cuestionar** en un MVP de operaciones (privacidad,
+  dependencia, coste, reproducibilidad); su ventaja de calidad es difícil de
+  capitalizar como aporte diferencial de la tesis.
+- **Qwen2.5 vs Llama 3:** Qwen aporta **licencia Apache-2.0** (menos cláusulas que
+  la Llama Community License → reproducibilidad/defensa más limpias) y **mejor
+  español**; Llama 3 es el baseline **más reconocible** para un tribunal. Ambos son
+  defendibles; Qwen encaja algo mejor en una tesis en **español** sobre operaciones.
+
+#### Decisión (recomendación)
+
+1. **Adoptar LLM local con Ollama** como motor de generación del MVP (Fase 4),
+   descartando OpenAI **como opción por defecto** por privacidad, coste recurrente
+   y reproducibilidad.
+2. **Modelo primario: Qwen2.5 (7B)** por su fuerza en **español**, su adherencia a
+   formato (útil para **forzar citas** y reducir alucinación, RNF-05) y su
+   **licencia Apache-2.0**. **14B** si el hardware lo permite.
+3. **Alternativa documentada: Llama 3.1 8B** (mismo runtime), como *fallback* y
+   baseline reconocible; cambiar de modelo es `ollama pull` + ajuste de prompt.
+4. **Capa LLM agnóstica del proveedor:** integrarse contra el **endpoint
+   OpenAI-compatible** de Ollama (`localhost:11434`), de modo que el modelo (e
+   incluso, a futuro y **solo como benchmark offline-consciente**, un proveedor en
+   nube) sea **intercambiable por configuración** sin reescribir el pipeline.
+
+- **Justificación técnica:** la calidad de un 7–14B local es **suficiente** para
+  redactar respuestas ancladas en evidencia ya recuperada (el trabajo "difícil"
+  —encontrar las líneas— lo hace el retriever, no el LLM). Mantener **todo local**
+  conserva el invariante de privacidad y hace la tesis **reproducible y barata**.
+  La abstracción por endpoint evita el *lock-in* y permite comparar modelos.
+- **Alternativas consideradas:** OpenAI GPT (A); Llama 3 como primario (B);
+  fine-tuning de un modelo propio; no usar LLM (solo recuperación).
+- **Por qué no se eligieron:** (A) egress de datos sensibles + coste +
+  reproducibilidad frágil; (B) válida, pero la licencia y el español de Qwen la
+  hacen 2ª opción (queda como *fallback*); fine-tuning excede el MVP (Regla 10);
+  "sin LLM" no cumple RF-10/RF-11.
+- **Qué pasa si se cambia un parámetro:** cambiar de modelo (`llm_model`) altera
+  calidad/latencia y exige **revalidar el prompt y la fidelidad de las citas**,
+  pero **no** obliga a reindexar (los embeddings, ADR-012, no cambian). En CPU, un
+  7B genera pocos tokens/s: la latencia sube con la longitud de la respuesta y el
+  `top_k` (más contexto → más tokens de entrada).
+- **Cómo se evalúa:** sobre un set pequeño de consultas de incidente con respuesta
+  conocida, medir (a) **fidelidad de las citas** (que cada afirmación apunte a
+  líneas reales recuperadas), (b) ausencia de alucinación, (c) latencia local.
+- **Limitaciones:** techo de calidad de un modelo local 7–14B frente a frontera;
+  latencia en CPU; el español/seguir-formato dependen del modelo elegido. La
+  verificación **anti-alucinación** se diseñará en Fase 4B (prompt + post-proceso
+  de citas), no la resuelve el modelo por sí solo.
+- **Afecta a:** RF-09, RF-10, RF-11; RNF-05 (citas). Parámetros futuros previstos:
+  `llm_backend` (ollama), `llm_model` (qwen2.5), `llm_base_url`, `temperature`,
+  `max_tokens`. **Vínculo R17:** OE4 · RF-09/RF-10/RF-11 · Capa LLM · ADR-016 · P-29.
+
+> **Dependencia nueva (si se aprueba):** instalar **Ollama** (runtime local) y
+> descargar el modelo (`ollama pull qwen2.5`). No requiere librerías de pago ni
+> clave. La integración Python puede hacerse con un cliente HTTP simple o el SDK
+> OpenAI apuntado a `localhost:11434` (se decidirá en Fase 4B).
+
+### ADR-017 · Diseño de la capa LLM: prompt, anti-alucinación, formato de citas y validación
+- **Fecha:** 2026-06-02 · **Estado:** **Aceptada (diseño)** — aprobada por el autor
+  el 2026-06-02 (incl. la opción A de la §5: **texto del chunk como `document` de
+  Chroma**, por fuente única de verdad, menor complejidad operativa, menor riesgo
+  de desincronización evidencia↔cita, almacenamiento irrelevante para el MVP y
+  apertura a recuperación híbrida). Diseño de Fase 4B, **sin código** (la
+  implementación no se inicia aún). El detalle completo (plantillas, flujo, casos
+  de prueba y métricas) vive en **`docs/92_DISENO_CAPA_LLM.md`**; aquí se fijan las
+  **decisiones** vinculantes.
+- **Contexto:** Con el modelo ya decidido (ADR-016), antes de programar la Fase 4B
+  hay que diseñar **cómo** se genera la respuesta sin alucinar y **cómo** se citan
+  las líneas de log (RF-09/10/11, RNF-05). Un LLM, si se le deja, **inventa**
+  números de línea y afirmaciones; el diseño debe hacerlo **imposible por
+  construcción**, no solo "pedirlo en el prompt".
+- **Decisiones:**
+  1. **Citas deterministas por token `[E#]` (clave anti-alucinación).** La
+     evidencia recuperada se etiqueta `[E1]…[Ek]`. El LLM **solo** puede citar esos
+     tokens; **nunca escribe archivos ni números de línea**. El sistema **expande**
+     cada `[E#]` a su cita real (`archivo:Lini-Lfin · rango ts · severidades`)
+     desde los **metadatos de confianza** del retriever. Resultado: una cita
+     fabricada es **imposible** (un `[E#]` inexistente se detecta y se elimina).
+  2. **Anclaje obligatorio + abstención.** El prompt prohíbe usar conocimiento
+     externo; toda afirmación factual debe llevar ≥1 `[E#]`. Si la evidencia no
+     basta, el modelo **debe abstenerse** con un texto controlado ("No hay
+     evidencia suficiente en los logs…") en vez de adivinar.
+  3. **Validación programática post-generación** (determinista, testeable): se
+     verifica que todo `[E#]` usado exista, que haya ≥1 cita si se afirmó algo, y
+     que la abstención sea coherente. Ante fallo: **un reintento más estricto** y,
+     si persiste, **degradación elegante** (devolver evidencia sin redacción, o
+     marcar "respuesta no verificada"). El LLM nunca "gana" si no cita.
+  4. **Salida estructurada en español, temperatura baja** (0.0–0.2 para
+     determinismo): bloque **Respuesta** (prosa con marcadores `[E#]`) + bloque
+     **Evidencia** (lista `[E#] → cita`). Formato exacto en `docs/92`.
+  5. **Origen del texto de evidencia (prerrequisito técnico de 4B).** Hoy Chroma
+     guarda como `document` solo la **referencia de cita**, no el **texto** del
+     chunk (vive en `*.chunks.jsonl`). Se decide **almacenar el texto del chunk
+     como `document` de Chroma** (la cita se deriva de los metadatos, que ya
+     incluyen `source_file`/`line_start`/`line_end`). **Análisis cuantificado** en
+     `docs/92` §8 (medido: 1 706 chunks, texto ~2,5 KB/chunk = 4,35 MB, +~46 % de
+     índice, reindex ~2,2 s, **0 impacto en búsqueda**): se elige la opción A
+     frente al lookup en `*.chunks.jsonl` por **integridad de la cita** (fuente
+     única `id↔texto`, sin riesgo de desincronización) y **consulta más simple**
+     (el texto llega con el resultado). Alternativa B (lookup `chunk_id→text` sin
+     reindexar) queda como *fallback* documentado.
+  6. **Cliente LLM inyectable.** La capa recibe el cliente (Ollama) por inyección,
+     igual que `encode_fn`/`store` en fases previas → los tests corren **sin
+     Ollama** (cliente falso determinista).
+- **Justificación técnica:** el mayor riesgo de un asistente de logs es la
+  **cita falsa** (un número de línea inventado destruye la confianza). Separar
+  "qué dice el modelo" (texto + `[E#]`) de "a qué apunta la cita" (metadatos de
+  confianza) traslada la integridad de la cita **fuera** del LLM. La validación y
+  la abstención convierten RNF-05 en un **control ejecutable**, no en una promesa.
+- **Alternativas consideradas:** (a) dejar que el LLM escriba las citas
+  (archivo:línea) libremente; (b) salida JSON estricta forzada por el modelo; (c)
+  re-ranking/segunda pasada de "verificación" con otro LLM.
+- **Por qué no se eligieron:** (a) es la fuente principal de alucinación de citas;
+  (b) útil pero frágil en modelos 7B locales (JSON inválido) — se prefiere un
+  formato simple `[E#]` + validación tolerante; (c) añade coste/latencia y otro
+  punto de fallo (Regla 10), se deja como mejora futura.
+- **Qué pasa si se cambia un parámetro:** ↑`temperature` → más creatividad y más
+  riesgo de afirmaciones no ancladas; ↑`top_k` → más evidencia (más recall, más
+  tokens, más latencia en CPU); el `max_tokens` acota la respuesta. Cambiar el
+  modelo (ADR-016) obliga a **revalidar** prompt y fidelidad de citas.
+- **Cómo se evalúa:** set pequeño de consultas con respuesta conocida (gold) y las
+  **métricas de `docs/92`** (validez de citas, cobertura/anclaje, abstención
+  correcta, alucinación, latencia). Tests con cliente LLM falso.
+- **Limitaciones:** la cita apunta al **rango del chunk** (≈20 eventos, ADR-011),
+  no a la línea exacta dentro del chunk (mejora futura); la verificación es
+  **estructural** (existencia/anclaje de citas), no semántica profunda; un 7B local
+  puede abstenerse de más o de menos (se calibra con el set de evaluación).
+- **Afecta a:** RF-09, RF-10, RF-11; RNF-05. Parámetros futuros: `temperature`,
+  `max_tokens`, `top_k` (reuso), `llm_*` (ADR-016). **Vínculo R17:** OE4 ·
+  RF-09/RF-10/RF-11 · Capa LLM · ADR-017 · P-30.
+
+---
+
 ## Decisiones pendientes (a resolver en su fase)
 
 | Tema | Fase | Notas |
 |------|------|-------|
-| Proveedor / modelo LLM | 4 | Calidad vs coste vs privacidad (¿local vs API?) |
+| _(El proveedor/modelo LLM se decidió en **ADR-016** = Aceptada: Ollama + Qwen2.5 7B. Sin decisiones abiertas.)_ | 4 | — |
 
 ---
 

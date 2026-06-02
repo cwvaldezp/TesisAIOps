@@ -11,12 +11,12 @@
 | Campo | Valor |
 |---|---|
 | **Fecha de la foto** | 2026-06-02 |
-| **Versión (paquete)** | `0.1.0` (`src/__init__.py`) · **hito: Fase 3.5 (validación con corpus real)** |
+| **Versión (paquete)** | `0.1.0` (`src/__init__.py`) · **hito: Fase 4A (modelo LLM decidido — ADR-016)** |
 | **Rama** | `main` (sincronizada con `origin/main`) |
 | **Remoto** | https://github.com/cwvaldezp/TesisAIOps.git |
 | **Estado global** | 🟢 **Pipeline VALIDADO con corpus real**: parseo → … → índice Chroma → Retriever, ejecutado sobre logs HAProxy reales (27 280 eventos, 1 706 chunks). **Sin RAG generativo, sin LLM**. |
-| **Próximo objetivo** | **Fase 4 — Capa LLM (respuesta con citas, RF-09/10/11)** |
-| **Hito siguiente previsto** | **Fase 4 — LLM + respuesta con citas** (requiere decidir el modelo LLM vía ADR) |
+| **Próximo objetivo** | **Fase 4B — implementar la Capa LLM** (Ollama + Qwen2.5 7B, RF-09/10/11) |
+| **Hito siguiente previsto** | **Fase 4B — generación con citas** (instalar Ollama + `ollama pull qwen2.5`; **aún no hecho**) |
 
 > **Versión:** se mantiene **`__version__ = "0.1.0"`** de forma deliberada (no se
 > sube a 0.2.0 en este hito). El avance de fase se rastrea por esta fotografía y
@@ -39,6 +39,7 @@
 | 2D | Vector store Chroma (local persistente, upsert) | `src/vector_store.py`, `src/index_embeddings.py` | ✅ |
 | 3 | Retriever (recuperación top-k + filtros, **sin LLM**) | `src/retriever.py`, `src/retrieve.py` | ✅ |
 | 3.5 | Validación con corpus real HAProxy (`.gz`, cabeceras capturadas, medición) | `src/ingest.py`, `src/validate_corpus.py`, `docs/91_VALIDACION_CORPUS.md` | ✅ |
+| 4A | Selección de modelo LLM (decisión, **sin código**) | ADR-016 (Ollama + Qwen2.5 7B) | ✅ (diseño) |
 
 **Flujos demostrables hoy:**
 - `log (HAProxy/IIS) → parse_line() → evento normalizado (13 campos) → JSON`
@@ -51,10 +52,10 @@
 
 | Fase | Descripción | Requisito(s) | ADR | Prerrequisito |
 |------|-------------|--------------|-----|---------------|
-| **4** | **Capa LLM (respuesta con citas)** | RF-09, RF-10, RF-11 | _(pendiente ADR)_ | Decidir modelo LLM |
+| **4B** | **Capa LLM (respuesta con citas)** — implementación | RF-09, RF-10, RF-11 | ADR-016 | Instalar Ollama + `ollama pull qwen2.5` |
 | 5 | Interfaz de consulta + demo | RF-12 | ADR-006 | — |
 
-## ADRs cerrados (15)
+## ADRs cerrados (17)
 
 | ADR | Decisión | Estado |
 |-----|----------|--------|
@@ -73,12 +74,17 @@
 | 013 | Vector store Chroma | Aceptada · **implementado (2D)** |
 | 014 | Recuperación top-k + filtros | Aceptada · **implementado (3)** |
 | 015 | Corpus real: `.gz` + cabeceras capturadas + ingesta recursiva | Aceptada · **implementado (3.5)** |
+| 016 | Modelo LLM: Ollama + Qwen2.5 7B (local) | **Aceptada (diseño)** — Fase 4A |
+| 017 | Diseño capa LLM: prompt, anti-alucinación, citas, validación | **Aceptada (diseño)** — 4B · `docs/92` |
 
-> Pendiente de decisión (sin ADR aún): **modelo LLM** (Fase 4).
+> Modelo LLM decidido en **ADR-016** (Fase 4A) y **diseño** de la capa LLM
+> **aprobado** en **ADR-017** (+ `docs/92_DISENO_CAPA_LLM.md`), incluida la decisión
+> de guardar el **texto del chunk como `document` de Chroma**. Sin decisiones de
+> ADR pendientes; su **implementación** es la Fase 4B (aún no iniciada).
 
-## Preguntas de defensa (28)
+## Preguntas de defensa (31)
 
-`P-01 … P-28` en [`98_PREGUNTAS_DEFENSA.md`](98_PREGUNTAS_DEFENSA.md), en formato
+`P-01 … P-31` en [`98_PREGUNTAS_DEFENSA.md`](98_PREGUNTAS_DEFENSA.md), en formato
 tribunal (7 facetas a partir de R16). Cobertura por tema:
 
 | Rango | Tema |
@@ -95,6 +101,9 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 | P-26 | Metadatos en Chroma (aplanado) y upsert idempotente |
 | P-27 | Consulta textual → evidencia recuperada **sin LLM** (Retriever, Fase 3) |
 | P-28 | Validación con corpus real: desajustes vs. sintéticos (`.gz`, cabeceras capturadas) |
+| P-29 | LLM **local** (Ollama + Qwen2.5) vs. API en la nube (privacidad/coste/repro) |
+| P-30 | Citas **reales** y no alucinadas: tokens `[E#]` deterministas + validación |
+| P-31 | Validación experimental del Retriever (recupera evidencia real relevante) |
 
 ## Métricas actuales
 
@@ -104,13 +113,14 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 | Archivos de prueba | 13 (`tests/test_*.py`) |
 | Módulos Python (`src/`) | 18 (incluye `src/ingest.py`, `src/validate_corpus.py`) |
 | Scripts de ejemplo | 1 (`examples/demo_haproxy_parser.py`) |
-| Documentos (`docs/`) | 12 `.md` + 3 diagramas `.mmd` |
-| ADRs | 15 |
-| Preguntas de defensa | 28 |
+| Documentos (`docs/`) | 14 `.md` + 4 diagramas `.mmd` |
+| ADRs | 17 (todos aceptados/implementados) |
+| Preguntas de defensa | 31 |
 | Requisitos funcionales cumplidos | RF-01…RF-08 (8 / 12) |
-| Commits | 6 |
-| Dependencias externas | PyYAML, pytest, sentence-transformers, chromadb (**sin nuevas en Fase 3.5**; `gzip` es stdlib) |
+| Commits | 8 |
+| Dependencias externas | PyYAML, pytest, sentence-transformers, chromadb. **Prevista Fase 4B:** Ollama (runtime local, ADR-016) — aún **no instalado** |
 | Validación corpus real | 27 280 eventos · 1 706 chunks · indexación 2,2 s (ver `91_VALIDACION_CORPUS.md`) |
+| Validación Retriever | consulta real "errores 404…" → top-5 coherente, verificado vs. log real (ver `93_VALIDACION_RETRIEVER.md`) |
 
 **Cobertura de requisitos funcionales:**
 
@@ -131,25 +141,35 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 
 ---
 
-## Próximo objetivo: Fase 4 — Capa LLM (respuesta con citas)
+## Próximo objetivo: Fase 4B — implementar la Capa LLM (respuesta con citas)
 
 **Qué:** sobre la evidencia que ya entrega el Retriever (Fase 3), **ensamblar el
-contexto/prompt** (RF-09), **generar una respuesta con un LLM** (RF-10) y **citar
+contexto/prompt** (RF-09), **generar una respuesta con el LLM** (RF-10) y **citar
 las líneas de log** que la sustentan (RF-11). Cierra el ciclo RAG completo.
 
-**Por qué ahora:** la recuperación de evidencia ya funciona y es citable; el
-siguiente paso natural es convertir esos chunks en una respuesta auditable.
+**Modelo decidido (Fase 4A, ADR-016):** **Ollama + Qwen2.5 7B (local)**, con Llama
+3.1 8B como alternativa documentada; capa agnóstica contra el endpoint
+OpenAI-compatible de Ollama (`localhost:11434`). Razón: privacidad por diseño,
+coste cero y reproducibilidad (P-29).
 
-**Prerrequisito (bloqueante):** **decidir el modelo LLM** mediante un ADR nuevo
-(local vs API; calidad vs coste vs privacidad). Sin esa decisión no se implementa.
+**Diseño de 4B (aprobado, sin código):** prompt, anti-alucinación, formato de
+citas, flujo y métricas en **`docs/92_DISENO_CAPA_LLM.md`** + **ADR-017 (Aceptada)**
+(+ diagrama `diagrams/flujo_llm_generacion.mmd`), incluida la decisión de guardar el
+**texto del chunk como `document` de Chroma** (§8). Listo para implementar cuando se
+autorice.
+
+**Prerrequisito (Fase 4B, aún no hecho):** **instalar Ollama** y `ollama pull
+qwen2.5`, y resolver el origen del texto de evidencia (ADR-017 §5). **No se ha
+instalado nada todavía.**
 
 **Riesgos / notas:**
-- La elección local vs API tensiona privacidad (espíritu ADR-005) contra calidad.
-- Las citas deben anclarse a los metadatos del chunk (RNF-05) para evitar alucinación.
+- En CPU, un 7B genera pocos tokens/s: latencia a vigilar en la demo.
+- La garantía **anti-alucinación** se diseña en 4B (prompt estricto + post-proceso
+  que verifica que cada cita existe entre los chunks recuperados, RNF-05).
 
-**Estado de Fase 3 (cerrada):** Retriever top-k denso (coseno) con filtros de
-metadatos operativo por CLI (`python -m src.retrieve "..."`); `embed_fn`/`store`
-inyectables → tests sin modelo ni chromadb; **66 pruebas en verde** (P-27).
+**Estado de Fase 4A (cerrada, diseño):** modelo LLM decidido (ADR-016, P-29);
+trazabilidad RF-09/10/11 vinculada. Sin código y sin dependencias nuevas
+instaladas.
 
 ---
 

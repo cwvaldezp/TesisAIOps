@@ -1,0 +1,16 @@
+%% Flujo de generación de respuesta (Fase 4B) — Retriever -> Prompt -> LLM -> Validación
+%% Diseño en docs/92_DISENO_CAPA_LLM.md (ADR-017). SIN código aún.
+flowchart TD
+    Q[Consulta] --> R[Retriever top-k - ADR-014]
+    R -->|0 resultados| Z[Mensaje: sin evidencia - no llama al LLM]
+    R -->|k resultados| EV[Etiquetar E1..Ek + texto del chunk]
+    EV --> PR[Ensamblar prompt: system + evidencia + pregunta - RF-09]
+    PR --> LLM[LLM local Ollama/Qwen2.5 - temp baja - ADR-016]
+    LLM --> VAL{Validacion: E# existen? anclaje? abstencion coherente?}
+    VAL -->|ok| EXP[Expandir E# a citas reales - RF-11]
+    VAL -->|falla| RT[1 reintento mas estricto]
+    RT --> VAL2{Validacion}
+    VAL2 -->|ok| EXP
+    VAL2 -->|falla| DEG[Degradar: evidencia sin redaccion / 'no verificada']
+    EXP --> OUT[Respuesta final con citas]
+    DEG --> OUT
