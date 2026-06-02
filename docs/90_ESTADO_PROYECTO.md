@@ -11,7 +11,7 @@
 | Campo | Valor |
 |---|---|
 | **Fecha de la foto** | 2026-06-02 |
-| **Versión (paquete)** | `0.1.0` (`src/__init__.py`) · **hito: Fase 4A (modelo LLM decidido — ADR-016)** |
+| **Versión (paquete)** | `0.1.0` (`src/__init__.py`) · **hito: Retriever evaluado (tag `v0.6.0-retriever-evaluated`) · diseño Fase 4 listo (ADR-016/017)** |
 | **Rama** | `main` (sincronizada con `origin/main`) |
 | **Remoto** | https://github.com/cwvaldezp/TesisAIOps.git |
 | **Estado global** | 🟢 **Pipeline VALIDADO con corpus real**: parseo → … → índice Chroma → Retriever, ejecutado sobre logs HAProxy reales (27 280 eventos, 1 706 chunks). **Sin RAG generativo, sin LLM**. |
@@ -119,7 +119,8 @@ tribunal (7 facetas a partir de R16). Cobertura por tema:
 | ADRs | 17 (todos aceptados/implementados) |
 | Preguntas de defensa | 33 |
 | Requisitos funcionales cumplidos | RF-01…RF-08 (8 / 12) |
-| Commits | 8 |
+| Commits | 10 |
+| Tags | 2 (`v0.5.0-retriever-validated`, `v0.6.0-retriever-evaluated`) |
 | Dependencias externas | PyYAML, pytest, sentence-transformers, chromadb. **Prevista Fase 4B:** Ollama (runtime local, ADR-016) — aún **no instalado** |
 | Validación corpus real | 27 280 eventos · 1 706 chunks · indexación 2,2 s (ver `91_VALIDACION_CORPUS.md`) |
 | Validación Retriever | consulta real "errores 404…" → top-5 coherente, verificado vs. log real (ver `93_VALIDACION_RETRIEVER.md`) |
